@@ -30,10 +30,14 @@
   "keywords": [
     "ai",
     "agent",
+    "agent-skills",
     "skill",
+    "skills-sh",
     "mcp",
+    "mcp-server",
     "claude-code",
     "cursor",
+    "cursorrules",
     "windsurf",
     "cline",
     "copilot",
@@ -41,7 +45,10 @@
     "opencode",
     "verification",
     "guardrails",
-    "memory"
+    "memory",
+    "blast-radius",
+    "ai-coding",
+    "hallucination-prevention"
   ],
   "repository": {
     "type": "git",

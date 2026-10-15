@@ -1,13 +1,16 @@
 <div align="center">
 
-# 🧠 Veratum
+# Veratum
 
 **The AI coding harness that remembers your repo and proves its work.**
 
 [yadavmandeep/Veratum](https://github.com/yadavmandeep/Veratum) · Antigravity · Claude Code · Cursor · Windsurf · Cline · GitHub Copilot · OpenCode
 
-[![skills.sh](https://skills.sh/b/yadavmandeep/veratum)](https://skills.sh/yadavmandeep/veratum)
-[![npm](https://img.shields.io/npm/v/veratum.svg?style=flat-square)](https://www.npmjs.com/package/veratum)
+[![Tests](https://img.shields.io/badge/tests-76%20passed-10B981.svg?style=flat-square&logo=githubactions&logoColor=white)](tests/)
+[![npm](https://img.shields.io/npm/v/veratum.svg?style=flat-square&color=CB3837&logo=npm)](https://www.npmjs.com/package/veratum)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-3776AB.svg?style=flat-square&logo=python&logoColor=white)](pyproject.toml)
+[![Dependencies](https://img.shields.io/badge/dependencies-0-blue.svg?style=flat-square)](package.json)
+[![Supported IDEs](https://img.shields.io/badge/IDEs-7%20supported-8B5CF6.svg?style=flat-square)](docs/hosts.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-2563EB.svg?style=flat-square)](LICENSE)
 
 </div>
@@ -97,14 +100,34 @@ Verified by:     `pnpm test -- list` → EXIT 0 (4.2s)
 Tree hash:       sha256:9c41e0a7… (matches verified state)
 ```
 
-## What Veratum changes
+```mermaid
+flowchart LR
+    G0["Gate 0<br/><b>Brain Sync</b><br/><i>Memory & Pitfalls</i>"] --> G1["Gate 1<br/><b>Contract</b><br/><i>Blast Radius & Scope</i>"]
+    G1 --> G2["Gate 2<br/><b>Checkpoint</b><br/><i>Hidden Snapshot</i>"]
+    G2 --> G3["Gate 3<br/><b>Scope Exec</b><br/><i>Read-Before-Write</i>"]
+    G3 --> G4["Gate 4<br/><b>Validation</b><br/><i>Compacted Logs (-90%)</i>"]
+    G4 --> G5["Gate 5<br/><b>Crypto Gate</b><br/><i>SHA-256 Tree Match</i>"]
+    G5 --> DONE(["✨ Verified Done"])
 
-```text
-Without:  task → edits → "done"
-
-With:     brain sync → contract + blast radius → checkpoint → scoped edits
-          → compacted validation → cryptographic gate + memory commit → done
+    style G0 fill:#1e293b,stroke:#3b82f6,stroke-width:2px,color:#f8fafc
+    style G1 fill:#1e293b,stroke:#6366f1,stroke-width:2px,color:#f8fafc
+    style G2 fill:#1e293b,stroke:#8b5cf6,stroke-width:2px,color:#f8fafc
+    style G3 fill:#1e293b,stroke:#ec4899,stroke-width:2px,color:#f8fafc
+    style G4 fill:#1e293b,stroke:#f59e0b,stroke-width:2px,color:#f8fafc
+    style G5 fill:#1e293b,stroke:#10b981,stroke-width:2px,color:#f8fafc
+    style DONE fill:#065f46,stroke:#10b981,stroke-width:2px,color:#ecfdf5
 ```
+
+## Why Veratum? (The Problem with Vanilla AI Agents)
+
+| Common AI Agent Failure | What Happens Without Veratum | How Veratum Solves It |
+|---|---|---|
+| **Amnesia Across Sessions** | Agent forgets repo conventions, test runners, and previous fixes. | **Gate 0 (Brain)**: Loads `.veratum/brain.json` with auto-detected stack, proven commands, and architectural pitfalls. |
+| **Silent Scope Creep** | Agent refactors unrelated files or imports new dependencies unasked. | **Gate 1 & 3 (Contract & Scope)**: Strict file lock; edits outside scope are blocked before they run. |
+| **Unintended Breakage** | Edits break callers in other modules because the agent had no dependency awareness. | **Blast-Radius Analysis**: Traces AST imports, dependent symbols, and co-change history before any edit. |
+| **Disastrous Experiments** | Agent gets lost in broken diffs, leaving broken working tree. | **Gate 2 (Shadow Checkpoint)**: Hidden zero-risk git snapshot with instant 1-command rollback (`V rollback`). |
+| **Token Exhaustion** | Huge test stack traces overflow the context window, causing hallucinations. | **Gate 4 (Compacted Validation)**: Strips 80–95% noisy terminal output, retaining only actionable failures. |
+| **False "Done" Claims** | Agent says "fixed" without testing, or tests and then sneaks in an untested final edit. | **Gate 5 (Cryptographic Gate)**: Completion blocked unless current working-tree SHA-256 matches verified ledger hash. |
 
 | Gate | What happens | Why it matters |
 |---|---|---|
