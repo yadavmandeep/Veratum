@@ -1,0 +1,23 @@
+{
+  "veratum-runtime": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {"type": "command", "command": "python3 hooks/pre_edit.py", "timeout": 15}
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {"type": "command", "command": "python3 hooks/post_edit.py", "timeout": 30}
+        ]
+      }
+    ],
+    "Stop": [
+      {"type": "command", "command": "python3 hooks/completion_gate.py", "timeout": 60}
+    ]
+  }
+}

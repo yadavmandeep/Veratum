@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeShellExecution": [
+      {
+        "command": "python .veratum/engine/veratum_cli.py hook pre-tool --host cursor"
+      }
+    ],
+    "afterFileEdit": [
+      {
+        "command": "python .veratum/engine/veratum_cli.py hook post-tool --host cursor"
+      }
+    ],
+    "stop": [
+      {
+        "command": "python .veratum/engine/veratum_cli.py hook stop --host cursor"
+      }
+    ],
+    "beforeReadFile": [
+      {
+        "command": "python .veratum/engine/veratum_cli.py hook read --host cursor"
+      }
+    ]
+  }
+}

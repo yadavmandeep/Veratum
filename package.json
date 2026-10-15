@@ -1,0 +1,53 @@
+{
+  "name": "veratum",
+  "version": "1.1.0",
+  "description": "Veratum — universal AI engineering harness, skill & MCP runtime for Antigravity, Claude Code, Cursor, Windsurf, Cline, GitHub Copilot and OpenCode. Persistent project memory, blast-radius analysis, shadow checkpoints, compacted verification and a cryptographic completion gate.",
+  "homepage": "https://github.com/yadavmandeep/Veratum#readme",
+  "author": "Mandeep Yadav",
+  "license": "MIT",
+  "bin": {
+        "veratum": "bin/veratum.js"
+  },
+  "files": [
+    "bin/",
+    "engine/veratum_cli.py",
+    "engine/mcp_server.py",
+    "core/",
+    "adapters/",
+    "skills/",
+    "docs/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node bin/veratum.js build",
+    "check": "node bin/veratum.js build --check",
+    "test": "node bin/veratum.js build --check && python -m unittest discover -s tests -v"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "skill",
+    "mcp",
+    "claude-code",
+    "cursor",
+    "windsurf",
+    "cline",
+    "copilot",
+    "antigravity",
+    "opencode",
+    "verification",
+    "guardrails",
+    "memory"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yadavmandeep/Veratum.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yadavmandeep/Veratum/issues"
+  }
+}

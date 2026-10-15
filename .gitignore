@@ -1,0 +1,83 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+.eggs/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Node & JavaScript dependencies & logs
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Testing & Coverage
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.tox/
+.nox/
+.hypothesis/
+
+# Environment variables & secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.cert
+
+# Operating System files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# IDE & Editor local files
+.idea/
+*.sublime-workspace
+*.sublime-project
+*.swp
+*.swo
+*~
+
+# Benchmarks & local experiment output
+benchmarks/.cache/
+benchmarks/results/
+benchmarks/runs/
+benchmarks/logs/
+
+# Dogfood copies of skills (published skills live in skills/)
+.agents/
+.claude/skills/
+
+# >>> veratum (managed)
+.veratum/logs/
+.veratum/ledger.json
+.veratum/contract.json
+.veratum/baseline.json
+.veratum/state.json
+.veratum/snapshots/
+.veratum/cache/
+# <<< veratum
+

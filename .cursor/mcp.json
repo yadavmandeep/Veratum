@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "veratum": {
+      "command": "python",
+      "args": [
+        "${workspaceFolder}/.veratum/engine/mcp_server.py",
+        "--root",
+        "${workspaceFolder}"
+      ]
+    }
+  }
+}

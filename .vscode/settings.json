@@ -1,0 +1,10 @@
+{
+  "pyrefly.extraSearchPaths": [
+    "${workspaceFolder}/engine",
+    "${workspaceFolder}/.veratum/engine"
+  ],
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/engine",
+    "${workspaceFolder}/.veratum/engine"
+  ]
+}

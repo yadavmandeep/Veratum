@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "veratum"
+version = "1.1.0"
+description = "Veratum engine: persistent project memory, blast-radius analysis, shadow checkpoints, compacted verification and a cryptographic completion gate for AI coding agents."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Mandeep Yadav" }]
+requires-python = ">=3.8"
+dependencies = []
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Topic :: Software Development :: Quality Assurance",
+  "Environment :: Console",
+]
+
+[project.urls]
+Homepage = "https://github.com/yadavmandeep/Veratum"
+
+[project.scripts]
+veratum = "veratum_cli:main"
+veratum-mcp = "mcp_server:main"
+
+[tool.setuptools]
+package-dir = { "" = "engine" }
+py-modules = ["veratum_cli", "mcp_server"]
+
+[tool.pyrefly]
+search-path = ["engine", ".veratum/engine"]
+
+[tool.pyright]
+extraPaths = ["engine", ".veratum/engine"]

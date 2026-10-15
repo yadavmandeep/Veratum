@@ -1,0 +1,11 @@
+{
+  "py-order-total-rename/gravitas/r1": {
+    "claimed_done": true,
+    "interventions": 0,
+    "note": "Final message said 'renamed everywhere' but the heuristic missed it."
+  },
+  "ts-lru-feature/veratum/r2": {
+    "interventions": 1,
+    "note": "Manual driver: had to answer a clarifying question."
+  }
+}

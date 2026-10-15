@@ -1,0 +1,89 @@
+{
+  "schema": "veratum.brain/v1",
+  "project": "veratum",
+  "created_at": "2026-10-15T17:44:11Z",
+  "updated_at": "2026-10-15T18:19:03Z",
+  "stack": [
+    "node",
+    "python"
+  ],
+  "package_manager": "npm",
+  "commands": {
+    "test": "npm test",
+    "build": "npm run build"
+  },
+  "known_good_commands": {
+    "node bin/veratum.js build --check": {
+      "passes": 1,
+      "last_pass": "2026-10-15T18:08:48Z"
+    },
+    "npm test": {
+      "passes": 1,
+      "last_pass": "2026-10-15T18:18:05Z"
+    }
+  },
+  "modules": {
+    "adapters": {
+      "files": 5,
+      "languages": {
+        "py": 4,
+        "js": 1
+      }
+    },
+    "benchmarks": {
+      "files": 63,
+      "languages": {
+        "py": 37,
+        "ts": 24,
+        "mjs": 2
+      }
+    },
+    "bin": {
+      "files": 2,
+      "languages": {
+        "js": 2
+      }
+    },
+    "engine": {
+      "files": 3,
+      "languages": {
+        "py": 3
+      }
+    },
+    "skills": {
+      "files": 2,
+      "languages": {
+        "py": 2
+      }
+    },
+    "tests": {
+      "files": 1,
+      "languages": {
+        "py": 1
+      }
+    }
+  },
+  "entrypoints": [],
+  "insights": [],
+  "task_history": [
+    {
+      "contract_id": "c-20261015-234442-6be0",
+      "goal": "Fix Pyrefly missing-import for veratum_cli in mcp_server.py",
+      "files_changed": [
+        ".vscode/settings.json",
+        "engine/mcp_server.py",
+        "pyproject.toml",
+        "skills/veratum/scripts/mcp_server.py"
+      ],
+      "verify": "npm test",
+      "tree_hash": "ec30d4532651f4abdda36d608635c9cadab80fcad6b5f784d0413e2b310442b3",
+      "completed_at": "2026-10-15T18:19:03Z"
+    }
+  ],
+  "stats": {
+    "verify_runs": 2,
+    "verify_passes": 2,
+    "tasks_completed": 1,
+    "log_lines_saved": 76
+  }
+}

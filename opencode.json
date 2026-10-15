@@ -1,0 +1,13 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "veratum": {
+      "type": "local",
+      "command": [
+        "python",
+        ".veratum/engine/mcp_server.py"
+      ],
+      "enabled": true
+    }
+  }
+}

@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/yadavmandeep/Veratum/main/core/schema.json",
+  "title": "Veratum runtime documents",
+  "description": "Schemas for .veratum/brain.json, .veratum/contract.json and .veratum/ledger.json.",
+  "oneOf": [
+    {"$ref": "#/$defs/brain"},
+    {"$ref": "#/$defs/contract"},
+    {"$ref": "#/$defs/ledger"}
+  ],
+  "$defs": {
+    "timestamp": {"type": ["string", "null"], "description": "ISO-8601 UTC timestamp, e.g. 2026-10-15T10:00:00Z"},
+    "sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+    "insight": {
+      "type": "object",
+      "required": ["id", "kind", "text", "created_at"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^m[0-9]+$"},
+        "kind": {"enum": ["insight", "decision", "pitfall", "architecture", "command"]},
+        "text": {"type": "string", "minLength": 1},
+        "files": {"type": "array", "items": {"type": "string"}},
+        "created_at": {"$ref": "#/$defs/timestamp"}
+      }
+    },
+    "brain": {
+      "type": "object",
+      "description": "Persistent cross-session project memory. Commit this file.",
+      "required": ["schema", "project", "commands", "insights"],
+      "properties": {
+        "schema": {"const": "veratum.brain/v1"},
+        "project": {"type": "string"},
+        "created_at": {"$ref": "#/$defs/timestamp"},
+        "updated_at": {"$ref": "#/$defs/timestamp"},
+        "stack": {"type": "array", "items": {"type": "string"}},
+        "package_manager": {"type": ["string", "null"]},
+        "commands": {
+          "type": "object",
+          "description": "Canonical verification commands keyed by type (test, build, lint, typecheck, ...).",
+          "additionalProperties": {"type": "string"}
+        },
+        "known_good_commands": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {"passes": {"type": "integer"}, "last_pass": {"$ref": "#/$defs/timestamp"}}
+          }
+        },
+        "modules": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {"files": {"type": "integer"}, "languages": {"type": "object", "additionalProperties": {"type": "integer"}}}
+          }
+        },
+        "entrypoints": {"type": "array", "items": {"type": "string"}},
+        "insights": {"type": "array", "items": {"$ref": "#/$defs/insight"}},
+        "task_history": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "contract_id": {"type": "string"},
+              "goal": {"type": "string"},
+              "files_changed": {"type": "array", "items": {"type": "string"}},
+              "verify": {"type": ["string", "null"]},
+              "tree_hash": {"$ref": "#/$defs/sha256"},
+              "completed_at": {"$ref": "#/$defs/timestamp"}
+            }
+          }
+        },
+        "stats": {
+          "type": "object",
+          "properties": {
+            "verify_runs": {"type": "integer"},
+            "verify_passes": {"type": "integer"},
+            "tasks_completed": {"type": "integer"},
+            "log_lines_saved": {"type": "integer"}
+          }
+        }
+      }
+    },
+    "contract": {
+      "type": "object",
+      "description": "The active task contract (machine-local).",
+      "required": ["schema", "status"],
+      "properties": {
+        "schema": {"const": "veratum.contract/v1"},
+        "id": {"type": "string", "pattern": "^c-"},
+        "status": {"enum": ["NONE", "ACTIVE", "COMPLETED", "SUPERSEDED", "ABANDONED"]},
+        "goal": {"type": "string"},
+        "files": {"type": "array", "items": {"type": "string"}, "description": "Workspace-relative paths, directories (trailing /) or fnmatch globs."},
+        "verify": {"type": ["string", "null"]},
+        "trivial": {"type": "boolean"},
+        "created_at": {"$ref": "#/$defs/timestamp"},
+        "completed_at": {"$ref": "#/$defs/timestamp"},
+        "baseline_hash": {"$ref": "#/$defs/sha256"},
+        "impact": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "dependents": {"type": "array", "items": {"type": "string"}},
+              "tests": {"type": "array", "items": {"type": "string"}},
+              "risk": {"enum": ["NONE", "LOW", "MEDIUM", "HIGH"]}
+            }
+          }
+        },
+        "checkpoints": {"type": "array", "items": {"type": "string"}},
+        "touched": {"type": "array", "items": {"type": "string"}},
+        "amendments": {"type": "array"},
+        "evidence": {"type": "object"}
+      }
+    },
+    "ledger": {
+      "type": "object",
+      "description": "Verification evidence bound to a working-tree hash (machine-local).",
+      "required": ["schema", "status"],
+      "properties": {
+        "schema": {"const": "veratum.ledger/v1"},
+        "status": {"enum": ["UNVERIFIED", "IN_PROGRESS", "PASSED", "FAILED", "STALE"]},
+        "contract_id": {"type": ["string", "null"]},
+        "command": {"type": ["string", "null"]},
+        "exit_code": {"type": ["integer", "null"]},
+        "duration_sec": {"type": ["number", "null"]},
+        "timestamp": {"$ref": "#/$defs/timestamp"},
+        "tree_hash": {"$ref": "#/$defs/sha256"},
+        "consecutive_failures": {"type": "integer", "minimum": 0},
+        "log_path": {"type": "string"},
+        "log_lines": {"type": "integer"},
+        "compacted_lines": {"type": "integer"},
+        "stale_reason": {"type": "string"},
+        "stale_at": {"$ref": "#/$defs/timestamp"},
+        "gate_overridden": {"type": "object"},
+        "history": {"type": "array", "maxItems": 20}
+      }
+    }
+  }
+}

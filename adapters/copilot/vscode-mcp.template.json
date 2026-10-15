@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "veratum": {
+      "type": "stdio",
+      "command": "python3",
+      "args": ["${workspaceFolder}/.veratum/engine/mcp_server.py", "--root", "${workspaceFolder}"]
+    }
+  }
+}
