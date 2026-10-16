@@ -31,7 +31,7 @@ Veratum requires **Node.js (>=16)** and **Python (>=3.8)**.
 When editing core specifications or the engine, synchronize adapters and skill files:
 
 ```bash
-# Rebuild skill packages and IDE adapter files from core/SKILL.md
+# Rebuild skill packages and IDE adapter files from core/SKILL.template.md
 node bin/veratum.js build
 
 # Validate that generated adapters and skills are strictly in sync

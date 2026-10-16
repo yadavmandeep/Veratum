@@ -8,7 +8,7 @@
  *   npx veratum update [--ide ...]   re-sync engine + adapters (keeps brain.json)
  *   npx veratum uninstall --ide <ide> [--purge]
  *   npx veratum doctor | status | list
- *   npx veratum build [--check]      regenerate skills/veratum + IDE rule files from core/SKILL.md
+ *   npx veratum build [--check]      regenerate skills/veratum + IDE rule files from core/SKILL.template.md
  *   npx veratum <engine command>     any veratum_cli.py command, e.g. `verify "npm test"`
  *
  * IDEs: antigravity, claude-code, cursor, windsurf, cline, copilot, opencode
@@ -61,19 +61,19 @@ const c = {
 };
 
 // ---------------------------------------------------------------------------
-// Adapter compiler (core/SKILL.md -> skills/veratum bundle + every IDE's rule format)
+// Adapter compiler (core/SKILL.template.md -> skills/veratum bundle + every IDE's rule format)
 // ---------------------------------------------------------------------------
 
 function readSkill() {
-  const raw = fs.readFileSync(path.join(PKG_ROOT, "core", "SKILL.md"), "utf8").replace(/\r\n/g, "\n");
+  const raw = fs.readFileSync(path.join(PKG_ROOT, "core", "SKILL.template.md"), "utf8").replace(/\r\n/g, "\n");
   const m = raw.match(/^---\n([\s\S]*?)\n---\n+([\s\S]*)$/);
-  if (!m) throw new Error("core/SKILL.md is missing YAML frontmatter");
+  if (!m) throw new Error("core/SKILL.template.md is missing YAML frontmatter");
   return { raw, frontmatter: m[1], body: m[2].trim() + "\n" };
 }
 
 function compiledAdapters() {
   const { raw, body } = readSkill();
-  const generated = "<!-- Generated from core/SKILL.md by `veratum build`. Do not edit by hand. -->\n";
+  const generated = "<!-- Generated from core/SKILL.template.md by `veratum build`. Do not edit by hand. -->\n";
   const engine = (name) => fs.readFileSync(path.join(PKG_ROOT, "engine", name), "utf8").replace(/\r\n/g, "\n");
   return {
     // skills.sh bundle: `npx skills add <owner>/veratum --skill veratum --agent <ide>`
@@ -113,7 +113,7 @@ function build(check) {
       console.error(`✗ Out of date with core/ and engine/: ${stale.join(", ")}\n  Run: node bin/veratum.js build`);
       return 1;
     }
-    console.log(`${c.green("✓")} skills/veratum and all adapters are in sync with core/SKILL.md and engine/`);
+    console.log(`${c.green("✓")} skills/veratum and all adapters are in sync with core/SKILL.template.md and engine/`);
   }
   return 0;
 }

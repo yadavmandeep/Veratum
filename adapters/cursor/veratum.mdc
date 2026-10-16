@@ -4,7 +4,7 @@ globs:
 alwaysApply: true
 ---
 
-<!-- Generated from core/SKILL.md by `veratum build`. Do not edit by hand. -->
+<!-- Generated from core/SKILL.template.md by `veratum build`. Do not edit by hand. -->
 # Veratum — 6-Gate Engineering Protocol
 
 **One rule above all: report what happened, not what you intended.** Every claim rests on output you saw in this session. If you did not check something, say so explicitly.

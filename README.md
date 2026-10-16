@@ -186,7 +186,7 @@ Hooks are workflow guardrails, not an OS sandbox. See [hosts](docs/hosts.md) for
 ## Contributing
 
 ```bash
-node bin/veratum.js build     # regenerate skills/veratum + IDE adapters from core/SKILL.md
+node bin/veratum.js build     # regenerate skills/veratum + IDE adapters from core/SKILL.template.md
 npm test                     # sync check + full test suite
 ```
 

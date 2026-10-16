@@ -1051,6 +1051,8 @@ class TestSkillPack(unittest.TestCase):
 
     def test_pack_layout_and_frontmatter(self):
         self.assertFalse((REPO / "SKILL.md").exists(), "a root SKILL.md would hide skills/ from the skills CLI")
+        self.assertFalse((REPO / "core" / "SKILL.md").exists(), "core/SKILL.md would shadow skills/veratum in the skills CLI")
+        self.assertTrue((REPO / "core" / "SKILL.template.md").exists(), "core/SKILL.template.md must exist")
         skills = sorted(p.parent.name for p in (REPO / "skills").glob("*/SKILL.md"))
         self.assertEqual(skills, ["veratum", "veratum-debug", "veratum-highstakes", "veratum-python",
                                   "veratum-refactor", "veratum-review", "veratum-typescript"])
