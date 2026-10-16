@@ -31,29 +31,41 @@ Use Veratum to fix this bug and verify the result.
 
 ## Install
 
-Pick **your** IDE. You only need one line.
+Pick **your** IDE or AI coding tool.
 
-| IDE | Install the skill |
-|---|---|
-| Antigravity | `npx skills add yadavmandeep/veratum --skill veratum --agent antigravity --yes` |
-| Claude Code | `npx skills add yadavmandeep/veratum --skill veratum --agent claude-code --yes` |
-| Cursor | `npx skills add yadavmandeep/veratum --skill veratum --agent cursor --yes` |
-| Windsurf | `npx skills add yadavmandeep/veratum --skill veratum --agent windsurf --yes` |
-| Cline | `npx skills add yadavmandeep/veratum --skill veratum --agent cline --yes` |
-| GitHub Copilot | `npx skills add yadavmandeep/veratum --skill veratum --agent github-copilot --yes` |
-| OpenCode | `npx skills add yadavmandeep/veratum --skill veratum --agent opencode --yes` |
-
-The skill ships with the Veratum engine. The first time you use it, your agent runs the engine's `init`, which creates `.veratum/` (project memory) and detects your stack. Python 3.8+ is the only requirement.
-
-### Veratum Enforced (optional): hooks and MCP that the agent cannot skip
-
-The skill tells the agent what to do. **Enforced** mode makes your IDE block shortcuts mechanically: edits outside the contract, finishing with stale or missing verification, and tampering with evidence.
+### One-Command Full Setup (Recommended)
+Installs the runtime engine, project memory (`.veratum/`), rules, MCP server, and native hooks in one step:
 
 ```bash
 npx veratum init --ide antigravity   # or claude-code | cursor | windsurf | cline | copilot | opencode
 ```
+*Run `npx veratum init` with no flags for an interactive picker that auto-detects your editors.*
 
-Run it with no `--ide` to get an interactive picker. Step-by-step, per-IDE instructions are in the **[installation guide](docs/install.md)**.
+| IDE / Extension | Full Setup (Engine + Rules + MCP + Hooks) | Skill-only (`skills.sh`) |
+|---|---|---|
+| **Google Antigravity** | `npx veratum init --ide antigravity` | `npx skills add yadavmandeep/veratum --skill veratum --agent antigravity --yes` |
+| **Claude Code** | `npx veratum init --ide claude-code` | `npx skills add yadavmandeep/veratum --skill veratum --agent claude-code --yes` |
+| **Cursor** | `npx veratum init --ide cursor` | `npx skills add yadavmandeep/veratum --skill veratum --agent cursor --yes` |
+| **Windsurf** | `npx veratum init --ide windsurf` | `npx skills add yadavmandeep/veratum --skill veratum --agent windsurf --yes` |
+| **Cline (VS Code)** | `npx veratum init --ide cline` | `npx skills add yadavmandeep/veratum --skill veratum --agent cline --yes` |
+| **GitHub Copilot (VS Code)** | `npx veratum init --ide copilot` | `npx skills add yadavmandeep/veratum --skill veratum --agent github-copilot --yes` |
+| **OpenCode** | `npx veratum init --ide opencode` | `npx skills add yadavmandeep/veratum --skill veratum --agent opencode --yes` |
+
+### Using VS Code with Multiple Extensions?
+VS Code supports several AI assistants. Configure Veratum for whichever assistant you use in VS Code:
+- **GitHub Copilot**: Use `--ide copilot` (writes `.github/copilot-instructions.md` and `.vscode/mcp.json`).
+- **Cline / Roo Code extension**: Use `--ide cline` (writes `.clinerules`).
+- **Claude Code CLI** (in VS Code terminal): Use `--ide claude-code` (writes `CLAUDE.md` and `.claude/settings.json`).
+- **Google Antigravity**: Use `--ide antigravity` (writes `.agents/skills/` and `.agents/plugins/`).
+- **Using more than one?** Pass multiple flags: `npx veratum init --ide copilot --ide antigravity`, or select both in `npx veratum init`. All tools share the same `.veratum/` memory and verification ledger!
+
+### 🔒 Privacy & Git: Keeping `.veratum/` Purely Local
+If you are working on a company or shared repository and prefer not to commit Veratum's runtime or project memory to git, simply add `.veratum/` to your project's `.gitignore`:
+```gitignore
+# Keep Veratum runtime & memory 100% local
+.veratum/
+```
+Veratum functions completely offline and locally without needing to track or push anything to remote git. For machine-wide automatic exclusion across all your repos, add `.veratum/` to your global gitignore (`git config --global core.excludesfile ~/.gitignore_global`).
 
 ### Or just ask your agent
 

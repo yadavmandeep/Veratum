@@ -146,6 +146,38 @@ This writes the managed block in `AGENTS.md`, the `veratum` MCP entry in `openco
 
 ---
 
+## VS Code: Which option to use?
+
+VS Code supports multiple AI extensions. Pick the command matching the assistant you use:
+
+| Extension / Tool in VS Code | Command to Run | What it Configures |
+|---|---|---|
+| **GitHub Copilot** | `npx veratum init --ide copilot` | `.github/copilot-instructions.md` + `.vscode/mcp.json` |
+| **Cline / Roo Code** | `npx veratum init --ide cline` | `.clinerules` |
+| **Claude Code CLI** (Terminal) | `npx veratum init --ide claude-code` | `CLAUDE.md` + `.claude/settings.json` hooks |
+| **Google Antigravity** | `npx veratum init --ide antigravity` | `.agents/skills/veratum` + `.agents/plugins/veratum` |
+
+If you use multiple extensions in the same repository, pass multiple `--ide` flags or run `npx veratum init` for the interactive picker. All extensions automatically share the same `.veratum/` project memory and verification ledger.
+
+---
+
+## Privacy & Git: Keeping `.veratum/` 100% Local
+
+If you are working on a company or client repository and want to ensure Veratum's memory and state files are **never pushed to remote git**, add `.veratum/` to your project's `.gitignore`:
+
+```gitignore
+# Keep Veratum runtime & memory 100% local
+.veratum/
+```
+
+Veratum functions completely offline and locally without needing to track or push anything to remote git. For machine-wide automatic exclusion across all your repos, add `.veratum/` to your global gitignore:
+```bash
+git config --global core.excludesfile ~/.gitignore_global
+echo ".veratum/" >> ~/.gitignore_global
+```
+
+---
+
 ## More than one IDE?
 
 ```bash

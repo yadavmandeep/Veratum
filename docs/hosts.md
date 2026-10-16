@@ -23,3 +23,13 @@ Veratum is the same protocol everywhere, but IDEs expose different extension poi
 - Hooks are workflow guardrails, not an OS sandbox. `.veratum/ledger.json` lives in your workspace, so a process with unrestricted shell access could rewrite it. The tamper guard blocks the obvious routes (agent edits, shell redirects into `.veratum/*.json`).
 - On hosts without hooks, nothing prevents an agent from editing a file without calling `veratum_check_scope` first. Scope drift is still caught by `gate`, which diffs against the contract baseline.
 - Blast-radius analysis is static. It does not see dynamic imports, reflection or string-based registration (e.g. Django settings). The stack skills tell the agent to grep for those.
+
+## VS Code Extensions Matrix
+
+VS Code hosts multiple AI assistants. Choose the adapter that corresponds to the extension you run inside VS Code:
+- **GitHub Copilot**: `npx veratum init --ide copilot` (rules in `.github/copilot-instructions.md`, tools in `.vscode/mcp.json`)
+- **Cline / Roo Code**: `npx veratum init --ide cline` (rules in `.clinerules`)
+- **Claude Code CLI** (in VS Code integrated terminal): `npx veratum init --ide claude-code` (rules in `CLAUDE.md`, hooks in `.claude/settings.json`)
+- **Google Antigravity**: `npx veratum init --ide antigravity` (skill in `.agents/skills/veratum`, hooks in `.agents/plugins/veratum`)
+
+Multiple extensions in the same repository can be configured together (`npx veratum init --ide copilot --ide antigravity`) and will share the same `.veratum/` memory and evidence ledger.
