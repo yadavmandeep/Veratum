@@ -41,8 +41,8 @@ You will see the agent:
 ## 4. Check the result yourself
 
 ```bash
-python3 .veratum/engine/veratum_cli.py status    # contract, ledger, is the evidence fresh?
-python3 .veratum/engine/veratum_cli.py brain show
+npx veratum status    # contract, ledger, is the evidence fresh?   (in chat: /veratum status)
+npx veratum brain show
 ```
 
 ## 5. Commit the memory

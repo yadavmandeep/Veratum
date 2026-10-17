@@ -15,6 +15,8 @@ Veratum is the same protocol everywhere, but IDEs expose different extension poi
 | Evidence marked stale after an edit | **hook** | **hook** | **hook** (`afterFileEdit`) | at gate | at gate | at gate | **plugin** |
 | Completion gate on stop | **hook** | **hook** | **hook** (follow-up message) | MCP `check_gate` | MCP `check_gate` | MCP `check_gate` | MCP `check_gate` |
 | Tamper / destructive-git guard | **hook** | **hook** | **hook** (shell) | — | — | — | **plugin** |
+| "Use the code graph" reminder before Grep/Glob | **hook** (tool names assumed) | **hook** (`Glob\|Grep`) | rule text only | rule text only | rule text only | rule text only | **plugin** (`grep`, `glob`) |
+| `/veratum` shortcut | workflow | command | command | workflow | — | prompt file | command |
 
 **Bold** = mechanical. Everything else depends on the agent following the rules and calling the tools. The cryptographic check inside `gate` is always mechanical: when the gate runs, a stale or missing proof **cannot** pass, on any host.
 

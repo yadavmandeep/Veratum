@@ -48,6 +48,7 @@ V brain show
 
 - **Purpose**: Retrieves `.veratum/brain.json` containing stack detection, proven test/build commands, architectural invariants, and past pitfalls discovered in previous sessions.
 - **Action**: Do not re-explore stack details or re-guess test commands that the brain already documents. Read only what the brain does not explain.
+- **Codebase graph (automatic)**: if the brain output ends with a `Knowledge graph:` line, run `V graph query "<question>"` (MCP `veratum_graph`) **before** grepping or opening many files. It returns a token-budgeted map of the relevant files and symbols with `file:line` evidence. The graph builds and refreshes itself; never skip it because it "might be stale".
 
 ---
 
@@ -175,5 +176,6 @@ Tree hash:       sha256:<hash> (matches verified state)
 | `V gate` | `veratum_check_gate` | Cryptographically verify that tree hash matches verified ledger |
 | `V remember "<fact>"` | `veratum_remember` | Save durable knowledge to `.veratum/brain.json` |
 | `V impact <file>` | `veratum_impact` | Inspect downstream dependents and AST call hierarchy |
+| `V graph query "<q>"` | `veratum_graph` | Ask the codebase graph (files, symbols, docs; EXTRACTED / INFERRED / AMBIGUOUS edges with `file:line`) |
 | `V explain-shell "<cmd>"` | `veratum_explain_shell` | Audit shell command safety and target file paths |
 | `V doctor` | `veratum_doctor` | Run comprehensive health check and adapter diagnostic |

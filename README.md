@@ -80,7 +80,7 @@ Do not change unrelated configuration.
 ### Check it
 
 ```bash
-python3 .veratum/engine/veratum_cli.py doctor     # → Health: 100%
+npx veratum doctor     # → Health: 100%
 ```
 
 ## Use it
@@ -110,6 +110,52 @@ Scope:           ✓ all changes inside contract
 Impact checked:  src/routes/users.ts, src/routes/orders.ts
 Verified by:     `pnpm test -- list` → EXIT 0 (4.2s)
 Tree hash:       sha256:9c41e0a7… (matches verified state)
+```
+
+### Codebase graph (on by default, nothing to set up)
+
+Veratum builds a map of your code (files, functions, classes, docs, PDFs) the first time a session starts and keeps it fresh after every change. Your agent asks it instead of grepping, so it reads less and finds the right files faster. You don't have to run anything. If you want to look yourself, type this in your agent's chat:
+
+```text
+/veratum where is login handled?
+```
+
+Other shortcuts: `/veratum status`, `/veratum gate`, `/veratum impact src/auth.ts`, `/veratum export`, `/veratum report`. They work in Claude Code, Cursor, Copilot, OpenCode, Windsurf and Antigravity (Cline: just ask in plain words). From a plain terminal the same thing is:
+
+```bash
+npx veratum graph query "where is login handled?"
+```
+
+`/veratum export` (or `npx veratum graph export`) writes a picture (`graph.html`, `graph.svg`), an Obsidian vault and a Neo4j script to `.veratum/graph/export/`. `graph report` shows the most connected code and the code clusters (communities). `graph watch` rebuilds while you type. Every link shows the file and line it came from, marked `EXTRACTED` (it is written in the code), `INFERRED` (matched by name) or `AMBIGUOUS` (several candidates). In Claude Code, OpenCode and Antigravity a small hook also reminds the agent to use the graph the first two times it reaches for Grep/Glob in a task (it stops once the graph was used, and in the other editors the always-on rule text does that job; see [docs/hosts.md](docs/hosts.md)). To turn the automatic part off: `npx veratum config graph_auto off` (back on: `npx veratum config graph_auto auto`; just `npx veratum config` lists the settings you can change). More: [docs/usage.md](docs/usage.md#codebase-graph).
+
+**Example.** A tiny project with `app/billing.py` (`charge()` calls `audit()`) and `app/api.py` (`checkout()` calls `charge()`). You type:
+
+```text
+/veratum how does checkout work?
+```
+
+The agent runs `graph query` and gets this back (real output):
+
+```text
+NODE checkout (function) [src=app/api.py loc=L4 community=1]
+NODE charge (function) [src=app/billing.py loc=L1 community=0]
+NODE audit (function) [src=app/billing.py loc=L5 community=0]
+EDGE api.py --imports [EXTRACTED]--> billing.py  (app/api.py:L1)
+EDGE checkout --calls [INFERRED import-resolved]--> charge  (app/api.py:L5)
+EDGE charge --calls [INFERRED same-file]--> audit  (app/billing.py:L2)
+```
+
+Reading it: `api.py` really imports `billing.py` on line 1 (`EXTRACTED`). `checkout` calls `charge` on line 5 and `charge` calls `audit` on line 2 (`INFERRED`: matched by name, so worth a glance). The agent opens those few lines instead of the whole repo.
+
+Before changing `billing.py`, ask what could break:
+
+```text
+/veratum impact app/billing.py
+```
+```text
+[EXTRACTED] app/api.py:1 imports → app/billing.py  | from app.billing import charge
+[INFERRED]  app/api.py:5 calls   → app/billing.py::charge  | return charge(cart)
+Risk: LOW
 ```
 
 ```mermaid

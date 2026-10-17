@@ -48,7 +48,13 @@ If the agent edits anything after verifying, the gate prints:
 | `V contract --goal "…" --files "a,b,dir/,glob/*" --verify "<cmd>" [--mode plan\|review] [--profile auto\|eco\|balanced\|deep\|highstakes]` | Lock a task |
 | `V contract --mode implement` | Leave plan/review mode on the active contract (after approval) |
 | `V contract --extend "<files>"` / `--show` / `--abandon` | Change / view / drop the contract |
-| `V impact <file> [--depth 2] [--symbol X] [--json]` | Blast radius: dependents + the exports they use, git co-change history, dynamic mentions, related tests |
+| `V impact <file> [--depth 2] [--symbol X] [--evidence] [--json]` | Blast radius: dependents + the exports they use, git co-change history, dynamic mentions, related tests. `--evidence` (always on with `--json`) adds `file:line` proof per relationship, labelled `EXTRACTED` (import statement resolved) or `INFERRED` (name match, git history, test naming) |
+| `V graph build [--full] [--max-files N]` | Build/refresh the knowledge graph in `.veratum/graph/` (`graph.json`, `GRAPH_REPORT.md`, `cache.json`). Incremental: unchanged files (by SHA-256) are not re-parsed |
+| `V graph query "<question>" [--mode bfs\|dfs] [--depth 2] [--budget 2000]` | Token-budgeted subgraph for a question; every node/edge shows `file:line` and EXTRACTED / INFERRED / AMBIGUOUS |
+| `V graph path <A> <B>` · `graph explain <node>` · `graph report` · `graph benchmark "<q>"` · `graph status` | Shortest relationship path, one node's neighbours, god nodes/communities/surprising links, corpus-vs-subgraph token ratio, stale-file check. MCP: `veratum_graph` |
+| `V graph export [--format html\|svg\|obsidian\|cypher\|all] [--out dir] [--max-nodes 200]` | Picture, Obsidian vault, Neo4j script (default `.veratum/graph/export/`) |
+| `V graph watch` | Rebuild automatically while files change |
+| `V graph semantic list` / `add --data '{…}'` | PDFs/images/docs waiting for notes / store concepts your agent extracted from them |
 | `V check-scope <file>` | May this file be edited now? |
 | `V explain-shell "<cmd>"` | How the shell guard classifies a command, and what it would write |
 | `V checkpoint create [--label …]` / `list` | Shadow snapshot |
@@ -57,8 +63,20 @@ If the agent edits anything after verifying, the gate prints:
 | `V gate [--dry-run]` | Completion gate + Evidence Block |
 | `V audit` | Verify the hash-chained evidence log |
 | `V status [--json]` | Contract, ledger, freshness, changed files |
+| `V config` / `config <name>` / `config <name> <value>` | List, read or change a setting: `graph_auto` (auto\|refresh\|off), `compact_max_lines`, `verify_timeout_sec`. Enforcement settings (`enforcement`, `protected_paths`, …) are deliberately not settable here, so an agent cannot switch the guards off; edit `.veratum/config.json` by hand for those |
 | `V doctor` | Health check |
 
 ## MCP tools (Cursor, Windsurf, Cline, Copilot, OpenCode)
 
-`veratum_get_brain`, `veratum_remember`, `veratum_lock_contract`, `veratum_impact`, `veratum_check_scope`, `veratum_explain_shell`, `veratum_checkpoint`, `veratum_verify`, `veratum_check_gate`, `veratum_audit`, `veratum_status`. They behave exactly like the CLI commands above.
+`veratum_get_brain`, `veratum_remember`, `veratum_lock_contract`, `veratum_impact`, `veratum_graph`, `veratum_check_scope`, `veratum_explain_shell`, `veratum_checkpoint`, `veratum_verify`, `veratum_check_gate`, `veratum_audit`, `veratum_status`. They behave exactly like the CLI commands above.
+
+## Codebase graph
+
+On by default. At session start Veratum builds `.veratum/graph/` (small repos, up to 1500 source files) and refreshes it whenever files changed; `graph query`, `path`, `explain` and `report` also refresh a stale graph first. The session-start text tells the agent to query the graph before grepping, and the generated rule files for Cursor, Windsurf, Cline, Copilot and OpenCode say the same.
+
+* **Settings:** `npx veratum config graph_auto <value>`: `auto` (default: build if missing, then keep fresh), `refresh` (never build, only refresh an existing graph), `off`. It is stored as `"graph_auto"` in `.veratum/config.json`.
+* **What is in it:** files, functions, classes, Markdown docs (headings, links, `` `code` `` mentions), PDFs/images as nodes. Imports are `EXTRACTED`; name-resolved calls are `INFERRED`; several candidates are `AMBIGUOUS`. Every edge has `file:line`.
+* **Communities:** Louvain modularity clustering (stdlib), oversized communities are split again; see `GRAPH_REPORT.md`.
+* **PDFs, images, prose:** Veratum has no model of its own. `graph semantic list` shows what is waiting; the agent reads each file and stores concepts with `graph semantic add`. Those notes are untrusted: they can only be `INFERRED`/`AMBIGUOUS`, are capped, and are dropped when the source file changes.
+* **Exports:** `graph export` is self-contained (no CDN, no network). The Neo4j output is a `.cypher` script for `cypher-shell`.
+* **Git:** `.veratum/graph/` is generated; add it to `.gitignore` if you do not want it committed.

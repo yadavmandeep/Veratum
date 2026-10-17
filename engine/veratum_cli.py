@@ -49,6 +49,8 @@ BRAND = "Veratum"
 HOMEPAGE = "https://github.com/yadavmandeep/Veratum"
 VERATUM_DIRNAME = ".veratum"
 VERATUM_DIRNAME = VERATUM_DIRNAME
+# Runtime files installed together into .veratum/engine/ (graph and export load on demand from veratum_cli.py)
+ENGINE_FILES = ("veratum_cli.py", "veratum_graph.py", "veratum_export.py", "mcp_server.py")
 
 IGNORE_DIRS = {
     ".git", ".hg", ".svn", VERATUM_DIRNAME, "node_modules", "bower_components",
@@ -81,6 +83,7 @@ DEFAULT_CONFIG = {
     ],
     "installed_adapters": [],
     "python": "",
+    "graph_auto": "auto",             # auto: build the graph at session start (small repos) and keep it fresh | refresh | off
 }
 
 STATUS_PASSED = "PASSED"
@@ -161,6 +164,19 @@ def split_csv(values) -> list:
 
 def short_hash(h: str, n: int = 16) -> str:
     return (h or "")[:n]
+
+
+def _graph_module():
+    """Load the graph engine (veratum_graph.py, installed next to this file) and bind it to this module's helpers."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    try:
+        import veratum_graph
+    except ImportError:
+        raise VeratumError("veratum_graph.py is missing next to veratum_cli.py. Run `npx veratum update` (or re-add the skill).")
+    veratum_graph.bind(sys.modules[__name__])
+    return veratum_graph
 
 
 # ---------------------------------------------------------------------------
@@ -624,6 +640,11 @@ def brain_context(ws: Workspace, max_insights: int = 12) -> str:
     if others:
         lines.append("Memory:")
         lines.extend("  - [{}|{}] {}".format(i["id"], i.get("kind"), i["text"]) for i in others[-max_insights:])
+    gstats = (read_json(ws.dir / "graph" / "graph.json", {}) or {}).get("stats")
+    if gstats:
+        lines.append("Knowledge graph: {} files · {} nodes · {} edges. Use `graph query \"<question>\"` (or MCP veratum_graph) "
+                     "BEFORE grepping or opening many files; overview in .veratum/graph/GRAPH_REPORT.md.".format(
+                         gstats.get("files"), gstats.get("nodes"), gstats.get("edges")))
     history = brain.get("task_history") or []
     if history:
         last = history[-1]
@@ -658,6 +679,20 @@ _RS_MOD_RE = re.compile(r"^[ \t]*(?:pub(?:\([^)]*\))?[ \t]+)?mod[ \t]+(\w+)[ \t]
 _JAVA_IMPORT_RE = re.compile(r"^[ \t]*import[ \t]+(?:static[ \t]+)?(\w+(?:\.\w+)*(?:\.\*)?)[ \t]*;?", re.M)
 _JAVA_PACKAGE_RE = re.compile(r"^[ \t]*package[ \t]+([\w.]+)", re.M)
 _C_INCLUDE_RE = re.compile(r'^[ \t]*#[ \t]*include[ \t]*"([^"]+)"', re.M)
+
+
+def _py_import_names(raw: str) -> list:
+    clean = [n.strip().split(" as ")[0].strip() for n in raw.strip("() \t").replace("\n", " ").split(",")]
+    return [n for n in clean if n and n != "*" and n.isidentifier()]
+
+
+_IMPORT_LINE_PREFIXES = ("import ", "from ", "use ", "pub use ", "pub mod ", "mod ", "package ", "#include")
+
+# Relationship confidence (borrowed from Graphify's EXTRACTED / INFERRED idea, implemented natively):
+#   EXTRACTED - an import / include / use statement in the source resolves to the target (evidence = that line)
+#   INFERRED  - deduced from names or history: symbol mentions, dynamic references, git co-change, test naming
+CONF_EXTRACTED = "EXTRACTED"
+CONF_INFERRED = "INFERRED"
 
 
 def _strip_js_ext(path: str) -> str:
@@ -703,19 +738,20 @@ class CodeIndex:
         if m:
             self._go_module = m.group(1)
 
-    def _list_files(self, max_files: int) -> list:
+    def _list_files(self, max_files: int, exts=None) -> list:
+        exts = exts or LANG_BY_EXT
         files = []
         if is_git_repo(self.root):
             out = git(self.root, ["ls-files", "-co", "--exclude-standard", "-z"])
             for rel in _zsplit(out):
-                if os.path.splitext(rel)[1].lower() in LANG_BY_EXT and not _excluded(rel, []):
+                if os.path.splitext(rel)[1].lower() in exts and not _excluded(rel, []):
                     if not any(part in IGNORE_DIRS for part in rel.split("/")[:-1]):
                         files.append(rel)
         else:
             for dirpath, dirnames, filenames in os.walk(self.root):
                 dirnames[:] = [d for d in dirnames if d not in IGNORE_DIRS]
                 for name in filenames:
-                    if os.path.splitext(name)[1].lower() in LANG_BY_EXT:
+                    if os.path.splitext(name)[1].lower() in exts:
                         files.append(to_posix(os.path.relpath(os.path.join(dirpath, name), str(self.root))))
         files = sorted(set(files))
         return files[:max_files]
@@ -734,8 +770,7 @@ class CodeIndex:
         elif lang == "py":
             stmts = []
             for module, names in _PY_FROM_RE.findall(text):
-                clean = [n.strip().split(" as ")[0].strip() for n in names.strip("() \t").replace("\n", " ").split(",")]
-                stmts.append((module, [n for n in clean if n and n != "*" and n.isidentifier()]))
+                stmts.append((module, _py_import_names(names)))
             for names in _PY_IMPORT_RE.findall(text):
                 for name in names.split(","):
                     name = name.strip().split(" as ")[0].strip()
@@ -950,6 +985,96 @@ class CodeIndex:
                     break
         return hits
 
+    # -- evidence: file:line proof behind every relationship -------------------
+    @staticmethod
+    def _line_no(text: str, pos: int) -> int:
+        return text.count("\n", 0, pos) + 1
+
+    def _find_line(self, text: str, needle: str):
+        pos = text.find(needle)
+        return None if pos < 0 else self._line_no(text, pos)
+
+    def import_evidence(self, importer: str, target: str, limit: int = 3) -> tuple:
+        """(evidence, confidence): the import statement line(s) in `importer` that resolve to `target`."""
+        text = _read_text(self.root / importer)
+        lines = text.splitlines()
+        lang = self.lang(importer)
+        data = self.parsed(importer)
+        found: list = []
+        confidence = CONF_EXTRACTED
+        if lang == "js":
+            for m in _JS_IMPORT_RE.finditer(text):
+                if self._match_js(target, importer, m.group(1)):
+                    found.append(self._line_no(text, m.start()))
+        elif lang == "py":
+            for m in _PY_FROM_RE.finditer(text):
+                if self._match_py(target, importer, [(m.group(1), _py_import_names(m.group(2)))]):
+                    found.append(self._line_no(text, m.start()))
+            for m in _PY_IMPORT_RE.finditer(text):
+                stmts = [(n.strip().split(" as ")[0].strip(), []) for n in m.group(1).split(",") if n.strip()]
+                if stmts and self._match_py(target, importer, stmts):
+                    found.append(self._line_no(text, m.start()))
+        elif lang == "go":
+            for imp in data.get("imports", []):
+                if self._match_go(target, importer, [imp]):
+                    found.append(self._find_line(text, '"{}"'.format(imp)))
+        elif lang == "rs":
+            for use in data.get("uses", []):
+                if self._match_rs(target, importer, {"uses": [use], "mods": []}):
+                    found.append(self._find_line(text, use))
+            for name in data.get("mods", []):
+                if self._match_rs(target, importer, {"uses": [], "mods": [name]}):
+                    found.append(self._find_line(text, "mod " + name))
+        elif lang == "java":
+            for imp in data.get("imports", []):
+                if self._match_java(target, importer, {"imports": [imp], "package": "", "text": ""}):
+                    found.append(self._find_line(text, imp))
+            if not found:  # same-package use without an import: a name match, not a statement
+                confidence = CONF_INFERRED
+                cls = posixpath.splitext(posixpath.basename(target))[0]
+                m = re.search(r"\b{}\b".format(re.escape(cls)), text)
+                if m:
+                    found.append(self._line_no(text, m.start()))
+        elif lang == "c":
+            for inc in data.get("includes", []):
+                if self._match_c(target, importer, [inc]):
+                    found.append(self._find_line(text, inc))
+        evidence = []
+        for ln in dict.fromkeys(n for n in found if n):
+            evidence.append({"file": importer, "line": ln, "text": lines[ln - 1].strip()[:160] if ln <= len(lines) else ""})
+            if len(evidence) >= limit:
+                break
+        if not evidence:
+            confidence = CONF_INFERRED  # resolved by the matcher but the statement could not be located
+        return evidence, confidence
+
+    def symbol_sites(self, rel: str, symbols: list, limit: int = 4) -> list:
+        """First non-import line where each symbol appears in `rel` (call vs plain reference). Name match only."""
+        lines = _read_text(self.root / rel).splitlines()
+        out: list = []
+        for sym in symbols:
+            rx = re.compile(r"(?<![\w$]){}(?![\w$])".format(re.escape(sym)))
+            in_import = False
+            for i, line in enumerate(lines, 1):
+                stripped = line.strip()
+                if in_import:
+                    in_import = ")" not in stripped
+                    continue
+                if stripped.startswith(_IMPORT_LINE_PREFIXES) or _JS_IMPORT_RE.search(line):
+                    in_import = ("(" in stripped or stripped.endswith("{")) and ")" not in stripped and "}" not in stripped
+                    continue
+                if stripped.startswith(("#", "//", "*", "/*", "--")):
+                    continue
+                m = rx.search(line)
+                if m:
+                    call = re.match(r"\s*\(", line[m.end():]) is not None
+                    out.append({"file": rel, "line": i, "symbol": sym, "kind": "call" if call else "reference",
+                                "text": stripped[:160]})
+                    break
+            if len(out) >= limit:
+                break
+        return out
+
     def co_changed(self, target: str, max_commits: int = 200) -> list:
         """Files that historically changed in the same commits as `target` (git log)."""
         if not is_git_repo(self.root):
@@ -971,7 +1096,37 @@ class CodeIndex:
                         key=lambda kv: (-kv[1], kv[0]))
         return [{"file": n, "commits": c, "of": commits} for n, c in ranked[:8]]
 
-    def blast_radius(self, target: str, depth: int = 1, symbol: str | None = None) -> dict:
+    def impact_edges(self, target: str, direct: list, usage: dict, levels: list, via: dict, co: list,
+                     dynamic: list, tests: dict) -> list:
+        """Relationship records with file:line evidence and EXTRACTED / INFERRED confidence."""
+        edges: list = []
+
+        def add(source, tgt, relation, confidence, evidence, depth=1):
+            edges.append({"source": source, "target": tgt, "relation": relation, "confidence": confidence,
+                          "depth": depth, "evidence": evidence})
+
+        for d in direct:
+            evidence, conf = self.import_evidence(d, target)
+            add(d, target, "imports", conf, evidence)
+            for site in self.symbol_sites(d, usage.get(d) or []):
+                add(d, "{}::{}".format(target, site["symbol"]), "calls" if site["kind"] == "call" else "references",
+                    CONF_INFERRED, [site])
+        for depth_no, level in enumerate(levels[1:], start=2):
+            for node in level:
+                parent = via.get(node, target)
+                evidence, conf = self.import_evidence(node, parent)
+                add(node, parent, "imports", conf, evidence, depth_no)
+        for hit in dynamic:
+            add(hit["file"], "{}::{}".format(target, hit["symbol"]), "mentions", CONF_INFERRED,
+                self.symbol_sites(hit["file"], [hit["symbol"]], 1))
+        for item in co:
+            add(item["file"], target, "co_changes", CONF_INFERRED,
+                [{"commits": item["commits"], "of": item["of"], "source": "git log"}])
+        for test, reason in sorted(tests.items()):
+            add(test, target, "tests", CONF_INFERRED, [{"file": test, "reason": reason}])
+        return edges
+
+    def blast_radius(self, target: str, depth: int = 1, symbol: str | None = None, evidence: bool = False) -> dict:
         direct = self.dependents(target)
         exported = self.symbols(target) if (self.root / target).is_file() else []
         usage = {d: self.symbol_usage(d, exported) for d in direct}
@@ -980,12 +1135,14 @@ class CodeIndex:
         levels = [direct]
         seen = {target, *direct}
         frontier = direct
+        via: dict = {}
         for _ in range(max(0, depth - 1)):
             nxt = []
             for node in frontier:
                 for dep in self.dependents(node):
                     if dep not in seen:
                         seen.add(dep)
+                        via[dep] = node
                         nxt.append(dep)
             if not nxt:
                 break
@@ -995,20 +1152,24 @@ class CodeIndex:
         stem = posixpath.splitext(posixpath.basename(target))[0]
         stem_key = re.sub(r"[^a-z0-9]", "", stem.lower())
         tests = set(d for d in all_deps if TEST_FILE_RE.search(d))
+        inferred_tests: dict = {}  # test file -> why it is only an inferred relationship
         if stem_key and len(stem_key) >= 3:
             for f in self.files:
                 if TEST_FILE_RE.search(f) and stem_key in re.sub(r"[^a-z0-9]", "", posixpath.basename(f).lower()):
                     tests.add(f)
+                    inferred_tests.setdefault(f, "test file name matches '{}'".format(stem))
         co = self.co_changed(target)
         for item in co:
             if TEST_FILE_RE.search(item["file"]):
                 tests.add(item["file"])
+                inferred_tests.setdefault(item["file"], "changed with target in {}/{} commits".format(item["commits"], item["of"]))
         tests.discard(target)
+        inferred_tests = {t: why for t, why in inferred_tests.items() if t not in all_deps and t != target}
         dyn_syms = [symbol] if symbol else exported
         dynamic = self.dynamic_refs(target, dyn_syms, exclude=set(all_deps)) if (depth > 1 or symbol) else []
         n = len(all_deps)
         risk = "NONE" if n == 0 else "LOW" if n <= 2 else "MEDIUM" if n <= 8 else "HIGH"
-        return {
+        report = {
             "target": target,
             "exists": (self.root / target).exists(),
             "symbols": exported,
@@ -1022,6 +1183,12 @@ class CodeIndex:
             "dynamic_refs": dynamic,
             "risk": risk,
         }
+        if evidence:
+            edges = self.impact_edges(target, direct, usage, levels, via, co, dynamic, inferred_tests)
+            report["edges"] = edges
+            report["confidence"] = {c: sum(1 for e in edges if e["confidence"] == c)
+                                    for c in (CONF_EXTRACTED, CONF_INFERRED)}
+        return report
 
 
 def render_impact(report: dict) -> str:
@@ -1049,6 +1216,22 @@ def render_impact(report: dict) -> str:
             "{} [{}]".format(h["file"], h["symbol"]) for h in report["dynamic_refs"][:8]))
     if report["tests"]:
         lines.append("   🧪 Related tests to run: " + ", ".join(report["tests"][:12]))
+    if report.get("edges") is not None:
+        conf = report.get("confidence") or {}
+        lines.append("   🧾 Evidence ({} EXTRACTED = import statement in source, {} INFERRED = name/history match):".format(
+            conf.get(CONF_EXTRACTED, 0), conf.get(CONF_INFERRED, 0)))
+        for e in report["edges"][:30]:
+            ev = (e.get("evidence") or [{}])[0]
+            if ev.get("line"):
+                where = "{}:{}".format(ev.get("file", e["source"]), ev["line"])
+                proof = "  | " + ev.get("text", "") if ev.get("text") else ""
+            elif ev.get("commits"):
+                where, proof = e["source"], "  | git log: {}/{} commits".format(ev["commits"], ev["of"])
+            else:
+                where, proof = e["source"], "  | " + ev["reason"] if ev.get("reason") else ""
+            lines.append("      [{}] {} {} → {}{}".format(e["confidence"], where, e["relation"], e["target"], proof))
+        if len(report["edges"]) > 30:
+            lines.append("      … +{} more (use --json for all)".format(len(report["edges"]) - 30))
     lines.append("   Risk: {}".format(report["risk"]))
     return "\n".join(lines)
 
@@ -1168,7 +1351,7 @@ def install_engine(ws: Workspace) -> list:
                     shutil.copyfile(str(src), str(dst))
                     copied.append(dst)
             break
-    for name in ("veratum_cli.py", "mcp_server.py"):
+    for name in ENGINE_FILES:
         src = here / name
         dst = ws.engine_dir / name
         if src.is_file():
@@ -2497,10 +2680,10 @@ def run_doctor(ws: Workspace) -> dict:
         add(label + " valid", isinstance(data, dict) and (str(data.get("schema", "")).startswith("veratum.")),
             "ok" if isinstance(data, dict) else "missing or invalid JSON")
     add("logs/ directory", ws.logs_dir.is_dir(), to_posix(os.path.relpath(str(ws.logs_dir), str(ws.root))))
-    engine_cli = ws.engine_dir / "veratum_cli.py"
     engine_mcp = ws.engine_dir / "mcp_server.py"
-    add("Engine installed (.veratum/engine)", engine_cli.is_file() and engine_mcp.is_file(),
-        "veratum_cli.py + mcp_server.py" if engine_cli.is_file() else "run `npx veratum init`")
+    missing = [n for n in ENGINE_FILES if not (ws.engine_dir / n).is_file()]
+    add("Engine installed (.veratum/engine)", not missing,
+        " + ".join(ENGINE_FILES) if not missing else "missing {}: run `npx veratum update`".format(", ".join(missing)))
     if engine_mcp.is_file():
         ok, detail = _mcp_selftest(engine_mcp, ws.root)
         add("MCP server self-test", ok, detail)
@@ -2546,6 +2729,61 @@ WRITE_TOOLS = {
     "edit_file", "write_file", "create_file", "edit", "write", "patch",     # aliases / OpenCode
 }
 SHELL_TOOLS = {"Bash", "run_command", "bash", "shell", "run_terminal_cmd"}
+# File-search tools of the hosts that let a hook add context before/after a search (see graph_hint).
+SEARCH_TOOLS = {"Grep", "Glob", "grep", "glob", "grep_search", "find_by_name", "codebase_search", "search_files"}
+GRAPH_HINT_MAX = 2  # reminders per task before the hint stays quiet
+GRAPH_HINT = ("[VERATUM] A code graph of this project exists. Before searching raw files, try "
+              "`graph query \"<what you are looking for>\"` (chat shortcut: /veratum <question>): it returns the relevant "
+              "files and symbols with file:line. Overview: .veratum/graph/GRAPH_REPORT.md")
+
+
+def _graph_hint_key(ws: Workspace) -> str:
+    contract = ws.contract()
+    return str(contract.get("id")) if contract.get("status") == "ACTIVE" else _dt.date.today().isoformat()
+
+
+def graph_hint(ws: Workspace) -> str:
+    """Reminder to use the graph before raw search: only when a graph exists, graph_auto is not off, the agent has not
+    queried the graph in this task, and fewer than GRAPH_HINT_MAX reminders were shown (a task = the active contract,
+    or the calendar day without one)."""
+    if str(ws.config().get("graph_auto", "auto")) == "off" or not (ws.dir / "graph" / "graph.json").is_file():
+        return ""
+    key = _graph_hint_key(ws)
+    state = ws.state()
+    hint = state.get("graph_hint") or {}
+    if hint.get("key") != key:
+        hint = {"key": key, "shown": 0, "used": False}
+    if hint.get("used") or hint.get("shown", 0) >= GRAPH_HINT_MAX:
+        return ""
+    hint["shown"] = hint.get("shown", 0) + 1
+    state["graph_hint"] = hint
+    ws.save_state(state)
+    return GRAPH_HINT
+
+
+def graph_hint_used(ws: Workspace) -> None:
+    """Called when the agent queries the graph: no more reminders for this task."""
+    state = ws.state()
+    hint = state.get("graph_hint") or {}
+    if hint.get("key") != _graph_hint_key(ws):
+        hint = {"key": _graph_hint_key(ws), "shown": 0}
+    hint["used"] = True
+    state["graph_hint"] = hint
+    ws.save_state(state)
+
+
+def _emit_hint(host: str, message: str) -> int:
+    """Allow the tool call and hand the model a note. Claude Code reads `additionalContext`; Antigravity and the OpenCode
+    plugin read `reason`; Cursor has no channel for it, so nothing is added there."""
+    if host == "claude":
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": message}}))
+    elif host == "antigravity":
+        print(json.dumps({"decision": "allow", "reason": message}))
+    elif host == "cursor":
+        print(json.dumps({"permission": "allow"}))
+    return 0
+
+
 PATH_KEYS = ("file_path", "notebook_path", "TargetFile", "target_file", "filePath", "path", "AbsolutePath")
 _TAMPER_RE = re.compile(r"\.veratum[\\/]+(ledger|contract|baseline|state)\.json|\.veratum[\\/]+snapshots", re.I)
 
@@ -2650,6 +2888,10 @@ def run_hook(event: str, host: str, fallback_root: Path, raw: str) -> int:
         return _emit(host, event, True)  # Veratum not installed in this workspace: never interfere.
     try:
         if event == "session-start":
+            try:
+                _graph_module().graph_auto_refresh(ws)
+            except VeratumError:
+                pass
             print(brain_context(ws))
             return 0
         if event == "read":
@@ -2684,6 +2926,9 @@ def _hook_pre_tool(ws: Workspace, host: str, payload: dict) -> int:
     name, paths, command = _normalize_tool(payload)
     if name in READ_TOOLS:
         return _emit(host, "pre-tool", True)
+    if name in SEARCH_TOOLS:
+        hint = graph_hint(ws)
+        return _emit_hint(host, hint) if hint else _emit(host, "pre-tool", True)
     if name in WRITE_TOOLS or (host == "cursor" and paths and not command):
         contract = ws.contract()
         for p in paths:
@@ -2800,6 +3045,57 @@ def _hook_stop(ws: Workspace, host: str, payload: dict) -> int:
 
 
 # ---------------------------------------------------------------------------
+# `config` command: a few safe settings without hand-editing .veratum/config.json
+# ---------------------------------------------------------------------------
+
+# Only convenience settings are settable here. Anything that loosens enforcement (enforcement, trivial_bypass,
+# read_before_write, protected_paths, ...) stays a deliberate manual edit of config.json, so an agent cannot switch the
+# guards off by running a command.
+CONFIG_SETTABLE = {
+    "graph_auto": ("choice", ("auto", "refresh", "off"),
+                   "auto = build the code graph at session start and keep it fresh; refresh = only refresh an existing graph; off = never"),
+    "compact_max_lines": ("int", (5, 500), "lines kept when a failing verify log is compacted"),
+    "verify_timeout_sec": ("int", (10, 86400), "seconds before `verify` gives up"),
+}
+
+
+def config_show(ws: Workspace) -> str:
+    cfg = ws.config()
+    lines = ["⚙️  [VERATUM CONFIG] .veratum/config.json (change with: npx veratum config <name> <value>)"]
+    for key, (_, allowed, hint) in CONFIG_SETTABLE.items():
+        shown = "|".join(allowed) if isinstance(allowed[0], str) else "{}-{}".format(*allowed)
+        lines.append("   {:<20} = {:<9} {}  [{}]".format(key, cfg.get(key), hint, shown))
+    lines.append("   Other keys (enforcement, protected_paths, ...) are edited by hand in .veratum/config.json on purpose.")
+    return "\n".join(lines)
+
+
+def config_set(ws: Workspace, key: str, raw: str) -> tuple:
+    if key not in CONFIG_SETTABLE:
+        if key in DEFAULT_CONFIG:
+            raise VeratumError("'{}' cannot be changed from the command line (it affects enforcement). "
+                               "Edit .veratum/config.json yourself if you really mean it.".format(key))
+        raise VeratumError("Unknown setting '{}'. Settable: {}.".format(key, ", ".join(CONFIG_SETTABLE)))
+    kind, allowed, _ = CONFIG_SETTABLE[key]
+    value = raw.strip().lower()
+    if kind == "choice":
+        value = {"on": "auto", "true": "auto", "no": "off", "false": "off"}.get(value, value)
+        if value not in allowed:
+            raise VeratumError("{} must be one of: {} (got '{}').".format(key, ", ".join(allowed), raw))
+    else:
+        try:
+            value = int(value)
+        except ValueError:
+            raise VeratumError("{} must be a number (got '{}').".format(key, raw))
+        if not allowed[0] <= value <= allowed[1]:
+            raise VeratumError("{} must be between {} and {}.".format(key, allowed[0], allowed[1]))
+    stored = read_json(ws.config_path, {}) or {}
+    before = ws.config().get(key)
+    stored[key] = value
+    ws.save_config(stored)
+    return before, value
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -2844,6 +3140,26 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("paths", nargs="+")
     s.add_argument("--depth", type=int, default=1)
     s.add_argument("--symbol", help="Only dependents that use this exported symbol")
+    s.add_argument("--evidence", action="store_true", help="Show file:line proof and EXTRACTED/INFERRED confidence per relationship (always included with --json)")
+    s.add_argument("--json", action="store_true")
+
+    s = sub.add_parser("graph", help="Knowledge graph: build/query/path/explain/report/benchmark/status")
+    s.add_argument("action", choices=["build", "query", "path", "explain", "report", "benchmark", "status",
+                                      "export", "watch", "semantic"])
+    s.add_argument("text", nargs="*", help="question (query/benchmark), two node names (path), node name (explain), "
+                                           "list|add [file.json] (semantic)")
+    s.add_argument("--format", choices=["html", "svg", "obsidian", "cypher", "all"], default="all", help="export format")
+    s.add_argument("--out", help="export directory inside the workspace (default .veratum/graph/export)")
+    s.add_argument("--max-nodes", type=int, default=200, help="export: most-connected nodes to draw")
+    s.add_argument("--interval", type=float, default=2.0, help="watch: seconds between checks")
+    s.add_argument("--debounce", type=float, default=3.0, help="watch: quiet seconds before rebuilding")
+    s.add_argument("--cycles", type=int, help="watch: stop after N checks (default: run until Ctrl-C)")
+    s.add_argument("--data", help="semantic add: JSON text instead of a file")
+    s.add_argument("--full", action="store_true", help="build: ignore the per-file cache")
+    s.add_argument("--max-files", type=int, default=5000)
+    s.add_argument("--mode", choices=["bfs", "dfs"], default="bfs")
+    s.add_argument("--depth", type=int, default=2)
+    s.add_argument("--budget", type=int, default=2000, help="query: approximate token budget")
     s.add_argument("--json", action="store_true")
 
     s = sub.add_parser("checkpoint", help="Shadow git checkpoints")
@@ -2870,6 +3186,10 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("gate", help="Hard completion gate")
     s.add_argument("--dry-run", action="store_true", help="Evaluate without closing the contract")
     s.add_argument("--json", action="store_true")
+
+    s = sub.add_parser("config", help="Show or change a setting, e.g. `config graph_auto off`")
+    s.add_argument("name", nargs="?", help="setting name (omit to list)")
+    s.add_argument("value", nargs="?", help="new value (omit to read the current one)")
 
     s = sub.add_parser("status"); s.add_argument("--json", action="store_true")
     s = sub.add_parser("doctor"); s.add_argument("--json", action="store_true")
@@ -3004,12 +3324,16 @@ def _dispatch(ws: Workspace, args) -> int:
             rel = ws.rel(path)
             if rel is None:
                 raise VeratumError("'{}' is outside the workspace.".format(path))
-            reports.append(index.blast_radius(rel, depth=max(1, args.depth), symbol=args.symbol))
+            reports.append(index.blast_radius(rel, depth=max(1, args.depth), symbol=args.symbol,
+                                              evidence=args.evidence or args.json))
         if args.json:
             _print_json(reports if len(reports) > 1 else reports[0])
         else:
             print("\n".join(render_impact(r) for r in reports))
         return 0
+
+    if cmd == "graph":
+        return _graph_module().run_command(ws, args)
 
     if cmd in ("checkpoint", "rollback"):
         action = "rollback" if cmd == "rollback" else args.action
@@ -3079,6 +3403,18 @@ def _dispatch(ws: Workspace, args) -> int:
         else:
             print(render_gate(result))
         return 0 if result["passed"] else 1
+
+    if cmd == "config":
+        if not args.name:
+            print(config_show(ws))
+        elif args.value is None:
+            if args.name not in DEFAULT_CONFIG:
+                raise VeratumError("Unknown setting '{}'. Settable: {}.".format(args.name, ", ".join(CONFIG_SETTABLE)))
+            print(ws.config().get(args.name))
+        else:
+            before, after = config_set(ws, args.name, args.value)
+            print("⚙️  [VERATUM CONFIG] {} = {}  (was {})".format(args.name, after, before))
+        return 0
 
     if cmd == "status":
         st = compute_status(ws)

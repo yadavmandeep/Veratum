@@ -2,8 +2,9 @@
 
 Start with:
 ```bash
-python3 .veratum/engine/veratum_cli.py doctor
+npx veratum doctor
 ```
+(No Node? `python3 .veratum/engine/veratum_cli.py doctor` does the same.)
 
 | Symptom | Fix |
 |---|---|

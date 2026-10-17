@@ -76,7 +76,7 @@ class VeratumTestCase(unittest.TestCase):
         return p
 
     def cli(self, *args, stdin: str | None = None, env: dict | None = None):
-        full_env = dict(os.environ)
+        full_env = {k: v for k, v in os.environ.items() if k != "CLAUDE_PROJECT_DIR"}  # never act on the host project
         full_env.update(env or {})
         proc = subprocess.run([sys.executable, str(ENGINE), "--root", str(self.tmp), *args],
                               input=(stdin or "").encode("utf-8"), capture_output=True, env=full_env, timeout=120)
@@ -89,8 +89,9 @@ class VeratumTestCase(unittest.TestCase):
         args = [sys.executable, str(script)]
         if script == ENGINE:
             args += ["--root", str(self.tmp), "hook", event, "--host", host]
+        env = {k: v for k, v in os.environ.items() if k != "CLAUDE_PROJECT_DIR"}  # never act on the host project
         proc = subprocess.run(args, input=json.dumps(payload).encode("utf-8"), capture_output=True,
-                              cwd=self.tmp, timeout=120)
+                              cwd=self.tmp, timeout=120, env=env)
         return proc.returncode, proc.stdout.decode("utf-8", "replace"), proc.stderr.decode("utf-8", "replace")
 
     def json_file(self, rel: str) -> dict:
@@ -309,6 +310,107 @@ class TestImpact(VeratumTestCase):
         code, out, stdout, _ = self.cli("impact", "a.py", "--json")
         self.assertEqual(code, 0, out)
         self.assertEqual(json.loads(stdout)["direct"], ["b.py"])
+
+
+class TestImpactEvidence(VeratumTestCase):
+    """Every relationship carries file:line proof and an EXTRACTED / INFERRED label."""
+    use_git = False
+
+    def report(self, target: str, depth: int = 2, **kw) -> dict:
+        ws = veratum_cli.Workspace(self.tmp)
+        return veratum_cli.CodeIndex(ws).blast_radius(target, depth=depth, evidence=True, **kw)
+
+    @staticmethod
+    def edge(rep: dict, source: str, relation: str, target: str = None) -> dict:
+        for e in rep["edges"]:
+            if e["source"] == source and e["relation"] == relation and (target is None or e["target"] == target):
+                return e
+        raise AssertionError("no {} edge from {} in {}".format(relation, source, rep["edges"]))
+
+    def test_default_report_is_unchanged(self):
+        self.write("a.py", "def run(): pass\n")
+        self.write("b.py", "import a\n")
+        rep = veratum_cli.CodeIndex(veratum_cli.Workspace(self.tmp)).blast_radius("a.py")
+        self.assertNotIn("edges", rep)
+        self.assertNotIn("confidence", rep)
+
+    def test_import_line_and_call_site(self):
+        self.write("src/lib/auth.ts", "export function verifyToken() {}\nexport const refreshSession = 1;\n")
+        self.write("src/api/a.ts", "// guard\n\nimport { verifyToken } from '../lib/auth';\nconst x = 1;\nverifyToken();\nconst y = verifyToken;\n")
+        rep = self.report("src/lib/auth.ts")
+        imp = self.edge(rep, "src/api/a.ts", "imports")
+        self.assertEqual(imp["confidence"], "EXTRACTED")
+        self.assertEqual(imp["evidence"][0]["line"], 3)
+        self.assertIn("../lib/auth", imp["evidence"][0]["text"])
+        call = self.edge(rep, "src/api/a.ts", "calls", "src/lib/auth.ts::verifyToken")
+        self.assertEqual(call["confidence"], "INFERRED")
+        self.assertEqual(call["evidence"][0]["line"], 5)  # the import line (3) is not a call site
+
+    def test_python_parenthesised_import_is_not_a_reference(self):
+        self.write("app/billing.py", "def charge(): pass\ndef refund(): pass\n")
+        self.write("app/api.py", "from app.billing import (\n    charge,\n    refund,\n)\n\nrefund()\n")
+        rep = self.report("app/billing.py")
+        self.assertEqual(self.edge(rep, "app/api.py", "imports")["evidence"][0]["line"], 1)
+        self.assertEqual(self.edge(rep, "app/api.py", "calls", "app/billing.py::refund")["evidence"][0]["line"], 6)
+
+    def test_transitive_edge_names_its_parent(self):
+        self.write("a.py", "x = 1\n")
+        self.write("b.py", "import a\n")
+        self.write("c.py", "\nimport b\n")
+        rep = self.report("a.py", depth=2)
+        e = self.edge(rep, "c.py", "imports", "b.py")
+        self.assertEqual((e["depth"], e["confidence"], e["evidence"][0]["line"]), (2, "EXTRACTED", 2))
+
+    def test_inferred_relationships_are_labelled(self):
+        self.write("src/lib/auth.ts", "export function verifyToken() {}\n")
+        self.write("src/lib/auth.test.ts", "import { verifyToken } from './auth';\n")
+        self.write("tests/auth.spec.ts", "describe('auth', () => {});\n")
+        self.write("src/plugins/loader.js", "\nconst fn = registry['verifyToken'];\n")
+        rep = self.report("src/lib/auth.ts")
+        self.assertEqual(self.edge(rep, "src/lib/auth.test.ts", "imports")["confidence"], "EXTRACTED")
+        name_match = self.edge(rep, "tests/auth.spec.ts", "tests")
+        self.assertEqual(name_match["confidence"], "INFERRED")
+        self.assertIn("name matches", name_match["evidence"][0]["reason"])
+        dyn = self.edge(rep, "src/plugins/loader.js", "mentions")
+        self.assertEqual((dyn["confidence"], dyn["evidence"][0]["line"]), ("INFERRED", 2))
+        counts = rep["confidence"]
+        self.assertEqual(counts["EXTRACTED"] + counts["INFERRED"], len(rep["edges"]))
+
+    def test_other_languages_locate_the_statement(self):
+        self.write("go.mod", "module example.com/shop\n")
+        self.write("internal/cart/cart.go", "package cart\n")
+        self.write("cmd/main.go", 'package main\n\nimport (\n\t"fmt"\n\t"example.com/shop/internal/cart"\n)\n')
+        self.assertEqual(self.edge(self.report("internal/cart/cart.go"), "cmd/main.go", "imports")["evidence"][0]["line"], 5)
+        self.write("src/db.rs", "pub fn connect() {}\n")
+        self.write("src/api.rs", "// h\nuse crate::db::connect;\n")
+        self.assertEqual(self.edge(self.report("src/db.rs"), "src/api.rs", "imports")["evidence"][0]["line"], 2)
+        self.write("src/main/java/com/acme/Invoice.java", "package com.acme;\npublic class Invoice {}\n")
+        self.write("src/main/java/com/acme/api/Ctl.java", "package com.acme.api;\n\nimport com.acme.Invoice;\n")
+        self.assertEqual(self.edge(self.report("src/main/java/com/acme/Invoice.java"),
+                                   "src/main/java/com/acme/api/Ctl.java", "imports")["evidence"][0]["line"], 3)
+        self.write("inc/util.h", "int f(void);\n")
+        self.write("src/app.c", '#include <stdio.h>\n#include "util.h"\n')
+        self.write("src/other.c", '#include "../inc/util.h"\n')
+        rep = self.report("inc/util.h")
+        self.assertEqual(self.edge(rep, "src/other.c", "imports")["evidence"][0]["line"], 1)
+
+    def test_java_same_package_use_is_only_inferred(self):
+        self.write("src/main/java/com/acme/Invoice.java", "package com.acme;\npublic class Invoice {}\n")
+        self.write("src/main/java/com/acme/Ledger.java", "package com.acme;\n\nclass Ledger { Invoice i; }\n")
+        e = self.edge(self.report("src/main/java/com/acme/Invoice.java"), "src/main/java/com/acme/Ledger.java", "imports")
+        self.assertEqual((e["confidence"], e["evidence"][0]["line"]), ("INFERRED", 3))
+
+    def test_cli_evidence_flag_and_json(self):
+        self.write("a.py", "x = 1\n")
+        self.write("b.py", "\nimport a\n")
+        code, out, stdout, _ = self.cli("impact", "a.py", "--evidence")
+        self.assertEqual(code, 0, out)
+        self.assertIn("[EXTRACTED] b.py:2 imports → a.py", stdout)
+        self.assertIn("import a", stdout)
+        code, out, stdout, _ = self.cli("impact", "a.py")
+        self.assertNotIn("EXTRACTED", stdout)
+        code, out, stdout, _ = self.cli("impact", "a.py", "--json")
+        self.assertEqual(json.loads(stdout)["edges"][0]["evidence"][0]["line"], 2)
 
 
 # ---------------------------------------------------------------------------
@@ -935,7 +1037,7 @@ class TestMcpServer(VeratumTestCase):
 # ---------------------------------------------------------------------------
 
 IDE_ENV_VARS = ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CURSOR_TRACE_ID", "CURSOR_AGENT",
-                "ANTIGRAVITY_AGENT", "ANTIGRAVITY", "OPENCODE", "OPENCODE_BIN_PATH")
+                "ANTIGRAVITY_AGENT", "ANTIGRAVITY", "OPENCODE", "OPENCODE_BIN_PATH", "CLAUDE_PROJECT_DIR")
 
 
 @unittest.skipUnless(HAS_NODE, "node not available")
@@ -977,6 +1079,38 @@ class TestInstaller(VeratumTestCase):
                          {"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "echo mine"}]}]}})
         self.assertNotIn("veratum", (self.tmp / ".gitignore").read_text(encoding="utf-8") if (self.tmp / ".gitignore").exists() else "")
 
+    def test_npx_config_command(self):
+        self.assertEqual(self.node("init", "--ide", "claude-code")[0], 0)
+        code, out = self.node("config", "graph_auto", "off")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.json_file(".veratum/config.json")["graph_auto"], "off")
+        code, out = self.node("config", "enforcement", "off")
+        self.assertNotEqual(code, 0)
+        self.assertEqual(self.json_file(".veratum/config.json")["enforcement"], "strict")
+
+    def test_slash_command_installed_and_removed_per_ide(self):
+        files = {"claude-code": ".claude/commands/veratum.md", "cursor": ".cursor/commands/veratum.md",
+                 "opencode": ".opencode/command/veratum.md", "copilot": ".github/prompts/veratum.prompt.md",
+                 "windsurf": ".windsurf/workflows/veratum.md", "antigravity": ".agents/workflows/veratum.md"}
+        self.write(".claude/commands/mine.md", "my own command\n")
+        self.assertEqual(self.node("init", "--all")[0], 0)
+        for ide, rel in files.items():
+            text = (self.tmp / rel).read_text(encoding="utf-8")
+            self.assertIn("graph query", text, ide)
+            self.assertNotIn("{{ARGS}}", text, ide)
+        self.assertIn("$ARGUMENTS", (self.tmp / files["claude-code"]).read_text(encoding="utf-8"))
+        self.assertTrue((self.tmp / files["claude-code"]).read_text(encoding="utf-8").startswith("---\n"))
+        self.assertFalse((self.tmp / ".clinerules").is_dir())  # Cline keeps its single rules file
+        self.write("app.py", "def login(user):\n    return user\n")
+        code, out = self.node("graph", "query", "login")  # the `npx veratum graph ...` form the README shows
+        self.assertEqual(code, 0, out)
+        self.assertIn("NODE login (function)", out)
+        self.assertEqual(self.node("update")[0], 0)  # idempotent
+        self.assertEqual(self.node("uninstall", "--all")[0], 0)
+        for rel in files.values():
+            self.assertFalse((self.tmp / rel).exists(), rel)
+        self.assertEqual((self.tmp / ".claude/commands/mine.md").read_text(encoding="utf-8"), "my own command\n")
+
     def test_init_installs_all_adapters_idempotently(self):
         self.write("CLAUDE.md", "# My project rules\nKeep me.\n")
         self.write(".claude/settings.json", json.dumps({"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "echo mine"}]}]}}))
@@ -985,7 +1119,8 @@ class TestInstaller(VeratumTestCase):
         self.assertEqual(code, 0, out)
         code, out = self.node("update")  # second run must not duplicate anything
         self.assertEqual(code, 0, out)
-        for rel in [".veratum/engine/veratum_cli.py", ".veratum/engine/mcp_server.py", ".veratum/brain.json",
+        for rel in [".veratum/engine/veratum_cli.py", ".veratum/engine/veratum_graph.py",
+                    ".veratum/engine/veratum_export.py", ".veratum/engine/mcp_server.py", ".veratum/brain.json",
                     ".agents/skills/veratum/SKILL.md", ".agents/plugins/veratum/hooks/pre_edit.py",
                     ".cursor/rules/veratum.mdc", ".cursor/mcp.json", ".cursor/hooks.json", ".windsurfrules",
                     ".clinerules", ".github/copilot-instructions.md", ".vscode/mcp.json", "AGENTS.md",
@@ -997,7 +1132,8 @@ class TestInstaller(VeratumTestCase):
         settings = self.json_file(".claude/settings.json")
         self.assertEqual(len(settings["hooks"]["Stop"]), 2, "user hook kept + one veratum hook")
         self.assertIn("echo mine", json.dumps(settings["hooks"]["Stop"]))
-        self.assertEqual(sum("veratum_cli.py" in json.dumps(e) for e in settings["hooks"]["PreToolUse"]), 1)
+        mine = [e["matcher"] for e in settings["hooks"]["PreToolUse"] if "veratum_cli.py" in json.dumps(e)]
+        self.assertEqual(sorted(mine), ["Edit|Write|MultiEdit|NotebookEdit|Bash", "Glob|Grep"], "one entry per matcher, no duplicates")
         gitignore = (self.tmp / ".gitignore").read_text(encoding="utf-8")
         self.assertIn("node_modules/", gitignore)
         self.assertIn(".veratum/ledger.json", gitignore)
@@ -1064,7 +1200,7 @@ class TestSkillPack(unittest.TestCase):
             self.assertTrue(0 < len(fm.get("description", "")) <= 1024, name)
 
     def test_core_skill_bundles_engine(self):
-        for name in ("veratum_cli.py", "mcp_server.py"):
+        for name in veratum_cli.ENGINE_FILES:
             bundled = (REPO / "skills" / "veratum" / "scripts" / name).read_bytes().replace(b"\r\n", b"\n")
             source = (REPO / "engine" / name).read_bytes().replace(b"\r\n", b"\n")
             self.assertEqual(bundled, source, "run `node bin/veratum.js build`")

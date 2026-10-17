@@ -1,9 +1,0 @@
-# Veratum runtime state (machine-local). brain.json and config.json stay tracked.
-logs/
-ledger.json
-contract.json
-baseline.json
-state.json
-snapshots/
-cache/
-*.tmp-*

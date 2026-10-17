@@ -97,8 +97,27 @@ TOOLS = [
                      "anyOf": [{"type": "array", "items": {"type": "string"}}, {"type": "string"}]},
             "depth": {"type": "integer", "minimum": 1, "maximum": 5, "default": 1},
             "symbol": {"type": "string", "description": "Only dependents that use this exported symbol."},
+            "evidence": {"type": "boolean", "default": False,
+                         "description": "Show file:line proof and EXTRACTED/INFERRED confidence for each relationship."},
         }, ["file"]),
         "annotations": {"readOnlyHint": True},
+    },
+    {
+        "name": "veratum_graph",
+        "description": "Knowledge graph of the codebase (files, symbols, imports, calls; every edge has file:line and EXTRACTED/INFERRED/AMBIGUOUS confidence). action=build refreshes it incrementally; query returns a token-budgeted subgraph for a question; path/explain trace relationships; report summarizes god nodes and communities; export writes html/svg/obsidian/cypher; semantic lists docs/PDFs/images awaiting your notes (list) or stores concepts you extracted from them (add, pass JSON in `data`). The graph builds and refreshes itself automatically.",
+        "inputSchema": _schema({
+            "action": {"type": "string", "enum": ["build", "query", "path", "explain", "report", "benchmark", "status", "export", "semantic"], "default": "query"},
+            "data": {"type": "string", "description": "semantic add: JSON {source_file, nodes:[{label}], edges:[{source,target,relation}]}; omit for semantic list."},
+            "format": {"type": "string", "enum": ["html", "svg", "obsidian", "cypher", "all"], "default": "all", "description": "export format."},
+            "question": {"type": "string", "description": "Question/keywords (query, benchmark) or node name (explain)."},
+            "from": {"type": "string", "description": "path: start node name."},
+            "to": {"type": "string", "description": "path: end node name."},
+            "mode": {"type": "string", "enum": ["bfs", "dfs"], "default": "bfs"},
+            "depth": {"type": "integer", "minimum": 1, "maximum": 6, "default": 2},
+            "budget": {"type": "integer", "minimum": 200, "default": 2000, "description": "Approximate token budget for query output."},
+            "full": {"type": "boolean", "default": False, "description": "build: ignore the cache."},
+        }),
+        "annotations": {"readOnlyHint": False},
     },
     {
         "name": "veratum_check_scope",
@@ -181,7 +200,22 @@ def _argv_for(name: str, args: dict) -> list:
         return argv
     if name == "veratum_impact":
         argv = ["impact"] + _as_list(args.get("file")) + ["--depth", str(int(args.get("depth") or 1))]
-        return argv + (["--symbol", str(args["symbol"])] if args.get("symbol") else [])
+        argv += ["--symbol", str(args["symbol"])] if args.get("symbol") else []
+        return argv + (["--evidence"] if args.get("evidence") else [])
+    if name == "veratum_graph":
+        action = str(args.get("action") or "query")
+        argv = ["graph", action]
+        if action == "semantic":
+            return argv + (["add", "--data", str(args["data"])] if args.get("data") else ["list"])
+        if action == "export":
+            return argv + ["--format", str(args.get("format") or "all")]
+        if action == "path":
+            argv += [str(args.get("from", "")), str(args.get("to", ""))]
+        elif args.get("question"):
+            argv += [str(args["question"])]
+        argv += ["--mode", str(args.get("mode") or "bfs"), "--depth", str(int(args.get("depth") or 2)),
+                 "--budget", str(int(args.get("budget") or 2000))]
+        return argv + (["--full"] if args.get("full") else [])
     if name == "veratum_check_scope":
         return ["check-scope", str(args.get("file", ""))]
     if name == "veratum_checkpoint":

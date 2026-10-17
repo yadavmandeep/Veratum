@@ -6,7 +6,7 @@
 |---|---|---|
 | `brain.json` | **yes** | Project memory: stack, commands, module map, insights, pitfalls, task history |
 | `config.json` | yes | Enforcement settings, installed adapters |
-| `engine/` | yes | The runtime (`veratum_cli.py`, `mcp_server.py`), so every IDE config points to one place |
+| `engine/` | yes | The runtime, so every IDE config points to one place: `veratum_cli.py` (gates, contract, hooks, CLI), `veratum_graph.py` (codebase graph), `veratum_export.py` (graph exports), `mcp_server.py`. All four are installed together |
 | `contract.json` | no | The active task |
 | `ledger.json` | no | Verification evidence bound to a tree hash |
 | `baseline.json`, `snapshots/`, `state.json` | no | Diff baselines, checkpoint index, hook counters |

@@ -11,6 +11,8 @@
   "files": [
     "bin/",
     "engine/veratum_cli.py",
+    "engine/veratum_graph.py",
+    "engine/veratum_export.py",
     "engine/mcp_server.py",
     "core/",
     "adapters/",

@@ -60,7 +60,7 @@ This adds a managed Veratum block to `CLAUDE.md` (your own content is kept) and 
 
 Restart Claude Code or open `/hooks` once to load them.
 
-**Verify**: `python3 .veratum/engine/veratum_cli.py doctor` → "Claude Code hooks wired".
+**Verify**: `npx veratum doctor` → "Claude Code hooks wired". **Shortcut**: `init` also adds `/veratum` (try `/veratum where is login handled?`, `/veratum status`).
 
 ---
 

@@ -79,6 +79,8 @@ function compiledAdapters() {
     // skills.sh bundle: `npx skills add <owner>/veratum --skill veratum --agent <ide>`
     "skills/veratum/SKILL.md": raw,
     "skills/veratum/scripts/veratum_cli.py": engine("veratum_cli.py"),
+    "skills/veratum/scripts/veratum_graph.py": engine("veratum_graph.py"),
+    "skills/veratum/scripts/veratum_export.py": engine("veratum_export.py"),
     "skills/veratum/scripts/mcp_server.py": engine("mcp_server.py"),
     "adapters/cursor/veratum.mdc":
       "---\n" +
@@ -270,6 +272,33 @@ function mcpSnippet(target, py) {
 // Per-IDE install / uninstall
 // ---------------------------------------------------------------------------
 
+// `/veratum <question | status | gate | impact <file> | export ...>` shortcut, so nobody has to type the engine path.
+// Cline is skipped: its workflows live in .clinerules/workflows, which collides with Veratum's .clinerules file.
+const COMMANDS = {
+  "claude-code": { file: ".claude/commands/veratum.md", args: "$ARGUMENTS",
+    front: "description: Veratum shortcut - ask the codebase graph, or run status / gate / impact / export\nargument-hint: <question> | status | gate | impact <file> | export | report" },
+  cursor: { file: ".cursor/commands/veratum.md", args: "(the text typed after /veratum)", front: "" },
+  opencode: { file: ".opencode/command/veratum.md", args: "$ARGUMENTS",
+    front: "description: Veratum shortcut - ask the codebase graph, or run status / gate / impact / export" },
+  copilot: { file: ".github/prompts/veratum.prompt.md", args: "(the text typed after /veratum)",
+    front: "mode: agent\ndescription: Veratum shortcut - ask the codebase graph, or run status / gate / impact / export" },
+  windsurf: { file: ".windsurf/workflows/veratum.md", args: "(the text typed after /veratum)",
+    front: "description: Veratum shortcut - ask the codebase graph, or run status / gate / impact / export" },
+  antigravity: { file: ".agents/workflows/veratum.md", args: "(the text typed after /veratum)",
+    front: "description: Veratum shortcut - ask the codebase graph, or run status / gate / impact / export" },
+};
+
+function installCommand(ide, target, py, log) {
+  const cmd = COMMANDS[ide];
+  if (!cmd) return;
+  const body = withPython(readTemplate("adapters/commands/veratum.md"), py).replace("{{ARGS}}", cmd.args);
+  writeFile(target, path.join(target, ...cmd.file.split("/")), cmd.front ? `---\n${cmd.front}\n---\n\n${body}` : body, log);
+}
+
+function removeCommand(ide, target, log) {
+  if (COMMANDS[ide]) removePath(target, path.join(target, ...COMMANDS[ide].file.split("/")), log);
+}
+
 const IDES = {
   antigravity: {
     install(target, py, skill, log) {
@@ -426,7 +455,7 @@ function indent(text, n) {
 }
 
 function installEngine(target, log) {
-  for (const name of ["veratum_cli.py", "mcp_server.py"]) {
+  for (const name of ["veratum_cli.py", "veratum_graph.py", "veratum_export.py", "mcp_server.py"]) {
     writeFile(target, path.join(target, ".veratum", "engine", name), readTemplate(`engine/${name}`), log);
   }
   const refs = path.join(PKG_ROOT, "skills", "veratum", "references");
@@ -562,6 +591,7 @@ async function init(opts) {
   const skill = readSkill();
   for (const ide of ides) {
     for (const n of IDES[ide].install(target, py, skill, log)) notes.push(`${IDE_LABELS[ide]}: ${n}`);
+    installCommand(ide, target, py, log);
   }
   installGitignore(target, log);
   updateConfig(target, (cfg) => {
@@ -579,7 +609,9 @@ async function init(opts) {
   }
   console.log(c.bold(`  ✨ Veratum is ready for ${ides.map((i) => IDE_LABELS[i]).join(", ")}.`));
   console.log(`  Check it:  ${py.shell} .veratum/engine/veratum_cli.py doctor`);
-  console.log(`  Try it:    ask your agent → "Use Veratum to fix <bug> and verify it."\n`);
+  console.log(`  Try it:    ask your agent → "Use Veratum to fix <bug> and verify it."`);
+  if (ides.some((i) => COMMANDS[i])) console.log(`  Shortcut:  type  /veratum where is login handled?   (also: /veratum status, /veratum gate, /veratum export)`);
+  console.log("");
   return 0;
 }
 
@@ -593,7 +625,10 @@ function uninstall(opts) {
   }
   const log = [];
   const notes = [];
-  for (const ide of ides) notes.push(...IDES[ide].uninstall(target, log));
+  for (const ide of ides) {
+    notes.push(...IDES[ide].uninstall(target, log));
+    removeCommand(ide, target, log);
+  }
   updateConfig(target, (c2) => {
     c2.installed_adapters = (c2.installed_adapters || []).filter((i) => !ides.includes(i));
   });
