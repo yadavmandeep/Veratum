@@ -2,13 +2,13 @@
 
 Start with:
 ```bash
-npx veratum doctor
+python .veratum/engine/veratum_cli.py doctor
 ```
-(No Node? `python3 .veratum/engine/veratum_cli.py doctor` does the same.)
+(On Linux/macOS use `python3`.)
 
 | Symptom | Fix |
 |---|---|
-| `python3: command not found` (Windows) | Use `python`. `npx veratum init` detects the right command and writes it into every config |
+| `python3: command not found` (Windows) | Use `python`. `npx github:yadavmandeep/Veratum init` detects the right command and writes it into every config |
 | `.veratum/` missing after `npx skills add` | Run the bundled engine once: `python3 .agents/skills/veratum/scripts/veratum_cli.py init` (Claude Code: `.claude/skills/…`, Windsurf: `.windsurf/skills/…`) |
 | Every edit is blocked: "No active Veratum contract" | Working as intended. Lock one: `V contract --goal … --files … --verify …`. For a quick throwaway session: `VERATUM_TRIVIAL=1`, or `"enforcement": "advisory"` |
 | "OUTSIDE the active contract scope" | `V contract --extend "<file>"`, then retry the edit |

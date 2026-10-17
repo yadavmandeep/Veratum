@@ -36,7 +36,7 @@ If the agent edits anything after verifying, the gate prints:
 
 ## Command reference
 
-`V` = `python3 .veratum/engine/veratum_cli.py` (or `npx veratum …`)
+`V` = `python3 .veratum/engine/veratum_cli.py` (on Windows, `python`)
 
 | Command | What it does |
 |---|---|
@@ -74,9 +74,9 @@ If the agent edits anything after verifying, the gate prints:
 
 On by default. At session start Veratum builds `.veratum/graph/` (small repos, up to 1500 source files) and refreshes it whenever files changed; `graph query`, `path`, `explain` and `report` also refresh a stale graph first. The session-start text tells the agent to query the graph before grepping, and the generated rule files for Cursor, Windsurf, Cline, Copilot and OpenCode say the same.
 
-* **Settings:** `npx veratum config graph_auto <value>`: `auto` (default: build if missing, then keep fresh), `refresh` (never build, only refresh an existing graph), `off`. It is stored as `"graph_auto"` in `.veratum/config.json`.
+* **Settings:** `python .veratum/engine/veratum_cli.py config graph_auto <value>`: `auto` (default: build if missing, then keep fresh), `refresh` (never build, only refresh an existing graph), `off`. It is stored as `"graph_auto"` in `.veratum/config.json`.
 * **What is in it:** files, functions, classes, Markdown docs (headings, links, `` `code` `` mentions), PDFs/images as nodes. Imports are `EXTRACTED`; name-resolved calls are `INFERRED`; several candidates are `AMBIGUOUS`. Every edge has `file:line`.
 * **Communities:** Louvain modularity clustering (stdlib), oversized communities are split again; see `GRAPH_REPORT.md`.
 * **PDFs, images, prose:** Veratum has no model of its own. `graph semantic list` shows what is waiting; the agent reads each file and stores concepts with `graph semantic add`. Those notes are untrusted: they can only be `INFERRED`/`AMBIGUOUS`, are capped, and are dropped when the source file changes.
 * **Exports:** `graph export` is self-contained (no CDN, no network). The Neo4j output is a `.cypher` script for `cypher-shell`.
-* **Git:** `.veratum/graph/` is generated; add it to `.gitignore` if you do not want it committed.
+* **Git:** `.veratum/graph/` is generated and is ignored automatically (`init` writes `graph/` into `.veratum/.gitignore`, and older installs get the line on the next `init`). To keep the whole `.veratum/` folder out of git, put `.veratum/` in your project's `.gitignore`.

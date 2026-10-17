@@ -7,7 +7,7 @@ Requirements: Node.js 16+ (for `npx`), Python 3.8+, git (recommended). On Window
 There are two levels:
 
 - **Veratum Skill** (`npx skills add …`): the protocol plus the bundled engine. The agent follows the gates and runs the engine commands itself.
-- **Veratum Enforced** (`npx veratum init --ide …`): adds IDE hooks and/or an MCP server, so scope violations, stale evidence and premature "done" are **blocked by the IDE**, not just discouraged.
+- **Veratum Enforced** (`npx github:yadavmandeep/Veratum init --ide …`): adds IDE hooks and/or an MCP server, so scope violations, stale evidence and premature "done" are **blocked by the IDE**, not just discouraged.
 
 You can start with the skill and add enforcement later. They work together.
 
@@ -23,7 +23,7 @@ For the terminal product, use `--agent antigravity-cli`. The skill lands in `.ag
 
 **Enforce (native hooks)**
 ```bash
-npx veratum init --ide antigravity
+npx github:yadavmandeep/Veratum init --ide antigravity
 agy plugin install "$PWD/.agents/plugins/veratum"
 agy plugin list            # shows "veratum"
 ```
@@ -47,7 +47,7 @@ The skill lands in `.claude/skills/veratum/`.
 
 **Enforce (native hooks)**
 ```bash
-npx veratum init --ide claude-code
+npx github:yadavmandeep/Veratum init --ide claude-code
 ```
 This adds a managed Veratum block to `CLAUDE.md` (your own content is kept) and merges four hooks into `.claude/settings.json`:
 
@@ -60,7 +60,7 @@ This adds a managed Veratum block to `CLAUDE.md` (your own content is kept) and 
 
 Restart Claude Code or open `/hooks` once to load them.
 
-**Verify**: `npx veratum doctor` → "Claude Code hooks wired". **Shortcut**: `init` also adds `/veratum` (try `/veratum where is login handled?`, `/veratum status`).
+**Verify**: `python .veratum/engine/veratum_cli.py doctor` → "Claude Code hooks wired". **Shortcut**: `init` also adds one command, `/veratum <area> <action>` (try `/veratum graph build`, `/veratum graph query where is login handled?`, `/veratum status`).
 
 ---
 
@@ -73,7 +73,7 @@ npx skills add yadavmandeep/veratum --skill veratum --agent cursor --yes
 
 **Enforce (rule + MCP + hooks)**
 ```bash
-npx veratum init --ide cursor
+npx github:yadavmandeep/Veratum init --ide cursor
 ```
 This writes `.cursor/rules/veratum.mdc` (always applied), `.cursor/mcp.json` (Veratum MCP server) and `.cursor/hooks.json` (`afterFileEdit`, `beforeShellExecution`, `stop`).
 Then open **Cursor → Settings → MCP** and switch on **veratum**. You should see 9 tools (`veratum_lock_contract`, `veratum_verify`, `veratum_check_gate`, …).
@@ -92,7 +92,7 @@ The skill lands in `.windsurf/skills/veratum/`.
 
 **Enforce (rules + MCP)**
 ```bash
-npx veratum init --ide windsurf
+npx github:yadavmandeep/Veratum init --ide windsurf
 ```
 This writes the managed block in `.windsurfrules`. Windsurf keeps MCP servers in a **global** file, so Veratum prints a ready-to-paste snippet instead of editing it. Open **Settings → Cascade → MCP Servers → View raw config** and add:
 ```json
@@ -110,7 +110,7 @@ npx skills add yadavmandeep/veratum --skill veratum --agent cline --yes
 
 **Enforce (rules + MCP)**
 ```bash
-npx veratum init --ide cline
+npx github:yadavmandeep/Veratum init --ide cline
 ```
 This writes `.clinerules`, or `.clinerules/veratum.md` if you use a rules folder. Add the printed MCP snippet under **Cline → MCP Servers → Configure MCP Servers**.
 
@@ -125,7 +125,7 @@ npx skills add yadavmandeep/veratum --skill veratum --agent github-copilot --yes
 
 **Enforce (instructions + MCP)**
 ```bash
-npx veratum init --ide copilot
+npx github:yadavmandeep/Veratum init --ide copilot
 ```
 This writes the managed block in `.github/copilot-instructions.md` and the `veratum` server in `.vscode/mcp.json`. In Copilot Chat, switch to **Agent** mode, open the tools picker and make sure the Veratum tools are ticked.
 
@@ -140,7 +140,7 @@ npx skills add yadavmandeep/veratum --skill veratum --agent opencode --yes
 
 **Enforce (plugin + MCP)**
 ```bash
-npx veratum init --ide opencode
+npx github:yadavmandeep/Veratum init --ide opencode
 ```
 This writes the managed block in `AGENTS.md`, the `veratum` MCP entry in `opencode.json`, and `.opencode/plugin/veratum.js`, which blocks out-of-scope `edit`/`write`/`patch` calls before they run. Restart OpenCode.
 
@@ -152,12 +152,12 @@ VS Code supports multiple AI extensions. Pick the command matching the assistant
 
 | Extension / Tool in VS Code | Command to Run | What it Configures |
 |---|---|---|
-| **GitHub Copilot** | `npx veratum init --ide copilot` | `.github/copilot-instructions.md` + `.vscode/mcp.json` |
-| **Cline / Roo Code** | `npx veratum init --ide cline` | `.clinerules` |
-| **Claude Code CLI** (Terminal) | `npx veratum init --ide claude-code` | `CLAUDE.md` + `.claude/settings.json` hooks |
-| **Google Antigravity** | `npx veratum init --ide antigravity` | `.agents/skills/veratum` + `.agents/plugins/veratum` |
+| **GitHub Copilot** | `npx github:yadavmandeep/Veratum init --ide copilot` | `.github/copilot-instructions.md` + `.vscode/mcp.json` |
+| **Cline / Roo Code** | `npx github:yadavmandeep/Veratum init --ide cline` | `.clinerules` |
+| **Claude Code CLI** (Terminal) | `npx github:yadavmandeep/Veratum init --ide claude-code` | `CLAUDE.md` + `.claude/settings.json` hooks |
+| **Google Antigravity** | `npx github:yadavmandeep/Veratum init --ide antigravity` | `.agents/skills/veratum` + `.agents/plugins/veratum` |
 
-If you use multiple extensions in the same repository, pass multiple `--ide` flags or run `npx veratum init` for the interactive picker. All extensions automatically share the same `.veratum/` project memory and verification ledger.
+If you use multiple extensions in the same repository, pass multiple `--ide` flags or run `npx github:yadavmandeep/Veratum init` for the interactive picker. All extensions automatically share the same `.veratum/` project memory and verification ledger.
 
 ---
 
@@ -181,9 +181,9 @@ echo ".veratum/" >> ~/.gitignore_global
 ## More than one IDE?
 
 ```bash
-npx veratum init --ide cursor --ide claude-code
-npx veratum init            # interactive picker (detects the IDEs you already use)
-npx veratum list            # what's installed / detected
+npx github:yadavmandeep/Veratum init --ide cursor --ide claude-code
+npx github:yadavmandeep/Veratum init            # interactive picker (detects the IDEs you already use)
+npx github:yadavmandeep/Veratum list            # what's installed / detected
 ```
 
 All IDEs share the same `.veratum/` memory and evidence, so you can switch between them mid-task.
@@ -192,15 +192,15 @@ All IDEs share the same `.veratum/` memory and evidence, so you can switch betwe
 
 ```bash
 npx skills update veratum --project --yes      # skill + bundled engine
-npx veratum update                         # re-sync engine + adapters for the IDEs you installed
+npx github:yadavmandeep/Veratum update                         # re-sync engine + adapters for the IDEs you installed
 ```
 Updates never touch `.veratum/brain.json`.
 
 ## Uninstall
 
 ```bash
-npx veratum uninstall --ide cursor         # remove one IDE adapter (memory kept)
-npx veratum uninstall --all --purge        # remove everything, including .veratum/
+npx github:yadavmandeep/Veratum uninstall --ide cursor         # remove one IDE adapter (memory kept)
+npx github:yadavmandeep/Veratum uninstall --all --purge        # remove everything, including .veratum/
 npx skills remove veratum                       # remove the skill
 ```
 Uninstall removes only Veratum's managed blocks and entries. Your own `CLAUDE.md`, rules, hooks and MCP servers are kept.

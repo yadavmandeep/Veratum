@@ -31,15 +31,23 @@ the package page appears at `https://skills.sh/yadavmandeep/veratum`, with per-s
 - Use the badge: `[![skills.sh](https://skills.sh/b/yadavmandeep/veratum)](https://skills.sh/yadavmandeep/veratum)`.
 - Keep each skill's `description` specific about **when** to use it. That is what users scan on skills.sh and what agents use to auto-activate it.
 
-## 3. npm (`npx veratum`)
+## 3. npm (optional)
+
+**The npm name `veratum` is taken** by an unrelated package (`npm view veratum` → "Tamper-proof cryptographic audit trails", v0.1.0, no CLI), so `npx veratum ...` can never run this tool. Until you publish under a free name, the docs use the GitHub form, which needs no npm publish (the repo must be public):
+
+```bash
+npx github:yadavmandeep/Veratum init --ide claude-code
+```
+
+To get a shorter command, publish under a free name (`npm view veratum-code` returned 404 when checked) and then replace `npx github:yadavmandeep/Veratum` with `npx veratum-code` in the docs:
 
 ```bash
 npm whoami                    # log in first with `npm login`
-npm view veratum          # 404 = the name is free
+npm view veratum-code         # 404 = the name is free
+# set "name": "veratum-code" in package.json (keep the "bin" entries)
 npm test                      # sync check + test suite must pass
 npm publish --access public
 ```
-If the name is taken, publish as `@veratum/code` and update the install commands in the docs.
 
 ## 4. Release checklist
 
@@ -47,7 +55,7 @@ If the name is taken, publish as `@veratum/code` and update the install commands
 - [ ] `python -m unittest tests/test_veratum_engine.py` passes
 - [ ] Version bumped in `package.json`, `pyproject.toml`, `engine/veratum_cli.py` (`VERSION`), every `SKILL.md`
 - [ ] `npx skills add ./ --list` shows all 7 skills
-- [ ] Fresh-project smoke test per IDE: `npx veratum init --ide <ide>` → `doctor` = 100%
+- [ ] Fresh-project smoke test per IDE: `npx github:yadavmandeep/Veratum init --ide <ide>` → `doctor` = 100%
 - [ ] CHANGELOG / GitHub release notes
 
 ## 5. Launch ideas

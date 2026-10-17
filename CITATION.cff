@@ -4,7 +4,7 @@ authors:
   - family-names: "Yadav"
     given-names: "Mandeep"
 title: "Veratum: Universal AI Engineering Harness, Skill & MCP Runtime"
-version: 1.1.0
+version: 1.2.0
 date-released: 2026-10-15
 url: "https://github.com/yadavmandeep/Veratum"
 repository-code: "https://github.com/yadavmandeep/Veratum"

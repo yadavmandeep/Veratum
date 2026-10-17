@@ -47,7 +47,7 @@ class TestModuleSplit(unittest.TestCase):
                 veratum_cli._graph_module()
         finally:
             builtins.__import__ = real
-        self.assertIn("npx veratum update", str(ctx.exception))
+        self.assertIn("npx github:yadavmandeep/Veratum update", str(ctx.exception))
 
 
 class GraphCase(VeratumTestCase):
@@ -438,7 +438,7 @@ class TestConfigCommand(GraphCase):
         self.assertEqual(stdout.strip(), "auto")
         _, _, stdout, _ = self.cli("config")
         self.assertIn("graph_auto", stdout)
-        self.assertIn("npx veratum config <name> <value>", stdout)
+        self.assertIn("python .veratum/engine/veratum_cli.py config <name> <value>", stdout)
 
     def test_aliases_and_numbers(self):
         self.cli("config", "graph_auto", "no")
@@ -565,6 +565,33 @@ class TestHintWiring(GraphCase):
         self.assertTrue(out["grep"].startswith("3 matches"))
         self.assertIn("graph query", out["grep"])
         self.assertEqual(out["read"], "file text")
+
+
+class TestGraphStaysOutOfGit(VeratumTestCase):
+    use_git = True
+
+    def ignored(self, rel):
+        return subprocess.run(["git", "check-ignore", "-q", rel], cwd=self.tmp).returncode == 0
+
+    def test_generated_graph_logs_and_state_are_ignored_but_brain_is_not(self):
+        self.write("app.py", "def login():\n    pass\n")
+        self.assertEqual(self.cli("graph", "build")[0], 0)
+        (self.tmp / ".veratum/logs").mkdir(exist_ok=True)
+        (self.tmp / ".veratum/logs/last_run.log").write_text("x", encoding="utf-8")
+        for rel in (".veratum/graph/graph.json", ".veratum/graph/GRAPH_REPORT.md", ".veratum/graph/cache.json",
+                    ".veratum/graph/export/graph.html", ".veratum/logs/last_run.log", ".veratum/ledger.json"):
+            self.assertTrue(self.ignored(rel), rel)
+        self.assertFalse(self.ignored(".veratum/brain.json"))  # memory stays shareable unless the user ignores it
+
+    def test_older_installs_get_graph_added(self):
+        self.write("app.py", "x = 1\n")
+        self.cli("init")
+        gi = self.tmp / ".veratum/.gitignore"
+        gi.write_text("logs/\nledger.json\n", encoding="utf-8")  # what an install from before the graph looked like
+        self.cli("init")
+        self.assertIn("graph/", gi.read_text(encoding="utf-8").splitlines())
+        self.cli("init")  # idempotent: no duplicate line
+        self.assertEqual(gi.read_text(encoding="utf-8").splitlines().count("graph/"), 1)
 
 
 if __name__ == "__main__":

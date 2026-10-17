@@ -2,14 +2,14 @@
 /**
  * Veratum installer & adapter compiler
  *
- *   npx veratum init --ide <ide>     install Veratum for ONE IDE (repeat --ide or comma-separate for more)
- *   npx veratum init                 interactive picker (terminal) or auto-detect (agents/CI)
- *   npx veratum init --all           every supported IDE
- *   npx veratum update [--ide ...]   re-sync engine + adapters (keeps brain.json)
- *   npx veratum uninstall --ide <ide> [--purge]
- *   npx veratum doctor | status | list
- *   npx veratum build [--check]      regenerate skills/veratum + IDE rule files from core/SKILL.template.md
- *   npx veratum <engine command>     any veratum_cli.py command, e.g. `verify "npm test"`
+ *   npx github:yadavmandeep/Veratum init --ide <ide>     install Veratum for ONE IDE (repeat --ide or comma-separate for more)
+ *   npx github:yadavmandeep/Veratum init                 interactive picker (terminal) or auto-detect (agents/CI)
+ *   npx github:yadavmandeep/Veratum init --all           every supported IDE
+ *   npx github:yadavmandeep/Veratum update [--ide ...]   re-sync engine + adapters (keeps brain.json)
+ *   npx github:yadavmandeep/Veratum uninstall --ide <ide> [--purge]
+ *   npx github:yadavmandeep/Veratum doctor | status | list
+ *   npx github:yadavmandeep/Veratum build [--check]      regenerate skills/veratum + IDE rule files from core/SKILL.template.md
+ *   npx github:yadavmandeep/Veratum <engine command>     any veratum_cli.py command, e.g. `verify "npm test"`
  *
  * IDEs: antigravity, claude-code, cursor, windsurf, cline, copilot, opencode
  */
@@ -48,6 +48,7 @@ const GITIGNORE_LINES = [
   ".veratum/state.json",
   ".veratum/snapshots/",
   ".veratum/cache/",
+  ".veratum/graph/",
 ];
 
 const tty = process.stdout.isTTY;
@@ -274,29 +275,34 @@ function mcpSnippet(target, py) {
 
 // `/veratum <question | status | gate | impact <file> | export ...>` shortcut, so nobody has to type the engine path.
 // Cline is skipped: its workflows live in .clinerules/workflows, which collides with Veratum's .clinerules file.
+// One command with one grammar, `/veratum <area> <action> [arguments]`: graph build|query|report|export|path|explain|docs,
+// status, gate, doctor, impact <file>, memory, remember, config. Anything else is treated as a graph question.
+const COMMAND_INFO = {
+  veratum: { desc: "Veratum: graph build | graph query <question> | graph export | status | gate | impact <file> | doctor",
+    hint: "graph build | graph query <question> | graph export | status | gate | impact <file>" },
+};
 const COMMANDS = {
-  "claude-code": { file: ".claude/commands/veratum.md", args: "$ARGUMENTS",
-    front: "description: Veratum shortcut - ask the codebase graph, or run status / gate / impact / export\nargument-hint: <question> | status | gate | impact <file> | export | report" },
-  cursor: { file: ".cursor/commands/veratum.md", args: "(the text typed after /veratum)", front: "" },
-  opencode: { file: ".opencode/command/veratum.md", args: "$ARGUMENTS",
-    front: "description: Veratum shortcut - ask the codebase graph, or run status / gate / impact / export" },
-  copilot: { file: ".github/prompts/veratum.prompt.md", args: "(the text typed after /veratum)",
-    front: "mode: agent\ndescription: Veratum shortcut - ask the codebase graph, or run status / gate / impact / export" },
-  windsurf: { file: ".windsurf/workflows/veratum.md", args: "(the text typed after /veratum)",
-    front: "description: Veratum shortcut - ask the codebase graph, or run status / gate / impact / export" },
-  antigravity: { file: ".agents/workflows/veratum.md", args: "(the text typed after /veratum)",
-    front: "description: Veratum shortcut - ask the codebase graph, or run status / gate / impact / export" },
+  "claude-code": { file: ".claude/commands/{name}.md", args: "$ARGUMENTS", front: (i) => `description: ${i.desc}\nargument-hint: ${i.hint}` },
+  cursor: { file: ".cursor/commands/{name}.md", args: "(the text typed after the command)", front: () => "" },
+  opencode: { file: ".opencode/command/{name}.md", args: "$ARGUMENTS", front: (i) => `description: ${i.desc}` },
+  copilot: { file: ".github/prompts/{name}.prompt.md", args: "(the text typed after the command)", front: (i) => `mode: agent\ndescription: ${i.desc}` },
+  windsurf: { file: ".windsurf/workflows/{name}.md", args: "(the text typed after the command)", front: (i) => `description: ${i.desc}` },
+  antigravity: { file: ".agents/workflows/{name}.md", args: "(the text typed after the command)", front: (i) => `description: ${i.desc}` },
 };
 
 function installCommand(ide, target, py, log) {
   const cmd = COMMANDS[ide];
   if (!cmd) return;
-  const body = withPython(readTemplate("adapters/commands/veratum.md"), py).replace("{{ARGS}}", cmd.args);
-  writeFile(target, path.join(target, ...cmd.file.split("/")), cmd.front ? `---\n${cmd.front}\n---\n\n${body}` : body, log);
+  for (const [name, info] of Object.entries(COMMAND_INFO)) {
+    const body = withPython(readTemplate(`adapters/commands/${name}.md`), py).replace("{{ARGS}}", cmd.args);
+    const front = cmd.front(info);
+    writeFile(target, path.join(target, ...cmd.file.replace("{name}", name).split("/")), front ? `---\n${front}\n---\n\n${body}` : body, log);
+  }
 }
 
 function removeCommand(ide, target, log) {
-  if (COMMANDS[ide]) removePath(target, path.join(target, ...COMMANDS[ide].file.split("/")), log);
+  if (!COMMANDS[ide]) return;
+  for (const name of Object.keys(COMMAND_INFO)) removePath(target, path.join(target, ...COMMANDS[ide].file.replace("{name}", name).split("/")), log);
 }
 
 const IDES = {
@@ -572,8 +578,8 @@ async function init(opts) {
   const ides = await resolveIdes(opts, target);
   if (!ides.length) {
     console.error("Tell Veratum which IDE you use, for example:\n");
-    for (const ide of ALL_IDES) console.error(`  npx veratum init --ide ${ide.padEnd(12)} # ${IDE_LABELS[ide]}`);
-    console.error("\n  npx veratum init --all              # every IDE");
+    for (const ide of ALL_IDES) console.error(`  npx github:yadavmandeep/Veratum init --ide ${ide.padEnd(12)} # ${IDE_LABELS[ide]}`);
+    console.error("\n  npx github:yadavmandeep/Veratum init --all              # every IDE");
     return 1;
   }
   console.log(c.dim(`   project: ${target}\n   python:  ${py.shell}\n   ide:     ${ides.map((i) => IDE_LABELS[i]).join(", ")}\n`));
@@ -608,9 +614,20 @@ async function init(opts) {
     console.log("");
   }
   console.log(c.bold(`  ✨ Veratum is ready for ${ides.map((i) => IDE_LABELS[i]).join(", ")}.`));
-  console.log(`  Check it:  ${py.shell} .veratum/engine/veratum_cli.py doctor`);
-  console.log(`  Try it:    ask your agent → "Use Veratum to fix <bug> and verify it."`);
-  if (ides.some((i) => COMMANDS[i])) console.log(`  Shortcut:  type  /veratum where is login handled?   (also: /veratum status, /veratum gate, /veratum export)`);
+  console.log("");
+  console.log(c.bold("  Use it (type these in your agent's chat):"));
+  const withCommands = ides.some((i) => COMMANDS[i]);
+  if (withCommands) {
+    console.log("    /veratum graph build                       map this project's code (it also builds itself at session start)");
+    console.log("    /veratum graph query where is login?       ask the code graph instead of grepping");
+    console.log("    /veratum graph export                      picture, Obsidian vault, Neo4j script");
+    console.log("    /veratum impact <file>                     what breaks if you change this file");
+    console.log("    /veratum status | gate | doctor            current task, completion check, health");
+  }
+  if (ides.some((i) => !COMMANDS[i])) {
+    console.log(`    ${withCommands ? "(Cline) " : ""}no slash commands here: just write "Use Veratum: where is login handled?"`);
+  }
+  console.log(`    Any task:  "Use Veratum to fix <bug> and verify it."`);
   console.log("");
   return 0;
 }
@@ -665,7 +682,7 @@ function delegate(args) {
   while (!fs.existsSync(path.join(dir, ".veratum", "engine", "veratum_cli.py"))) {
     const parent = path.dirname(dir);
     if (parent === dir) {
-      console.error("✗ Veratum is not installed here. Run: npx veratum init --ide <your-ide>");
+      console.error("✗ Veratum is not installed here. Run: npx github:yadavmandeep/Veratum init --ide <your-ide>");
       return 1;
     }
     dir = parent;
@@ -678,22 +695,22 @@ function help() {
   console.log(`Veratum v${PKG.version} — https://github.com/yadavmandeep/Veratum
 
 Install (pick your IDE):
-  npx veratum init --ide antigravity
-  npx veratum init --ide claude-code
-  npx veratum init --ide cursor
-  npx veratum init --ide windsurf
-  npx veratum init --ide cline
-  npx veratum init --ide copilot
-  npx veratum init --ide opencode
-  npx veratum init                     interactive picker / auto-detect
-  npx veratum init --all               every IDE
+  npx github:yadavmandeep/Veratum init --ide antigravity
+  npx github:yadavmandeep/Veratum init --ide claude-code
+  npx github:yadavmandeep/Veratum init --ide cursor
+  npx github:yadavmandeep/Veratum init --ide windsurf
+  npx github:yadavmandeep/Veratum init --ide cline
+  npx github:yadavmandeep/Veratum init --ide copilot
+  npx github:yadavmandeep/Veratum init --ide opencode
+  npx github:yadavmandeep/Veratum init                     interactive picker / auto-detect
+  npx github:yadavmandeep/Veratum init --all               every IDE
 
 Manage:
-  npx veratum list                     supported / installed IDEs
-  npx veratum update [--ide <ide>]     refresh engine + adapters (keeps memory)
-  npx veratum uninstall --ide <ide>    remove one IDE adapter (add --purge to delete .veratum/)
-  npx veratum doctor                   health check
-  npx veratum status                   current task, evidence freshness
+  npx github:yadavmandeep/Veratum list                     supported / installed IDEs
+  npx github:yadavmandeep/Veratum update [--ide <ide>]     refresh engine + adapters (keeps memory)
+  npx github:yadavmandeep/Veratum uninstall --ide <ide>    remove one IDE adapter (add --purge to delete .veratum/)
+  npx github:yadavmandeep/Veratum doctor                   health check
+  npx github:yadavmandeep/Veratum status                   current task, evidence freshness
 
 Engine (same as python3 .veratum/engine/veratum_cli.py ...):
   brain | remember | contract | impact | checkpoint | rollback | verify | gate

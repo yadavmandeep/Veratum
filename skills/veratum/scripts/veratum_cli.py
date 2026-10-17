@@ -44,7 +44,7 @@ import time
 import uuid
 from pathlib import Path
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 BRAND = "Veratum"
 HOMEPAGE = "https://github.com/yadavmandeep/Veratum"
 VERATUM_DIRNAME = ".veratum"
@@ -174,7 +174,7 @@ def _graph_module():
     try:
         import veratum_graph
     except ImportError:
-        raise VeratumError("veratum_graph.py is missing next to veratum_cli.py. Run `npx veratum update` (or re-add the skill).")
+        raise VeratumError("veratum_graph.py is missing next to veratum_cli.py. Run `npx github:yadavmandeep/Veratum update` (or re-add the skill).")
     veratum_graph.bind(sys.modules[__name__])
     return veratum_graph
 
@@ -1326,6 +1326,7 @@ baseline.json
 state.json
 snapshots/
 cache/
+graph/
 *.tmp-*
 """
 
@@ -1371,6 +1372,9 @@ def initialize(ws: Workspace, quiet: bool = False, rescan: bool = False) -> list
     if not gi.exists():
         gi.write_text(VERATUM_GITIGNORE, encoding="utf-8")
         created.append(gi)
+    elif "graph/" not in gi.read_text(encoding="utf-8", errors="replace").splitlines():
+        with open(gi, "a", encoding="utf-8", newline="\n") as fh:  # older installs: keep the generated graph out of git
+            fh.write("graph/\n")
     if not ws.config_path.exists():
         ws.save_config(dict(DEFAULT_CONFIG))
         created.append(ws.config_path)
@@ -2683,7 +2687,7 @@ def run_doctor(ws: Workspace) -> dict:
     engine_mcp = ws.engine_dir / "mcp_server.py"
     missing = [n for n in ENGINE_FILES if not (ws.engine_dir / n).is_file()]
     add("Engine installed (.veratum/engine)", not missing,
-        " + ".join(ENGINE_FILES) if not missing else "missing {}: run `npx veratum update`".format(", ".join(missing)))
+        " + ".join(ENGINE_FILES) if not missing else "missing {}: run `npx github:yadavmandeep/Veratum update`".format(", ".join(missing)))
     if engine_mcp.is_file():
         ok, detail = _mcp_selftest(engine_mcp, ws.root)
         add("MCP server self-test", ok, detail)
@@ -3061,7 +3065,7 @@ CONFIG_SETTABLE = {
 
 def config_show(ws: Workspace) -> str:
     cfg = ws.config()
-    lines = ["⚙️  [VERATUM CONFIG] .veratum/config.json (change with: npx veratum config <name> <value>)"]
+    lines = ["⚙️  [VERATUM CONFIG] .veratum/config.json (change with: python .veratum/engine/veratum_cli.py config <name> <value>)"]
     for key, (_, allowed, hint) in CONFIG_SETTABLE.items():
         shown = "|".join(allowed) if isinstance(allowed[0], str) else "{}-{}".format(*allowed)
         lines.append("   {:<20} = {:<9} {}  [{}]".format(key, cfg.get(key), hint, shown))

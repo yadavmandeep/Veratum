@@ -16,7 +16,7 @@ npx skills add yadavmandeep/veratum --skill veratum --agent <your-ide> --yes
 ## 2. (Optional) Turn on enforcement
 
 ```bash
-npx veratum init --ide <your-ide>
+npx github:yadavmandeep/Veratum init --ide <your-ide>
 ```
 
 For Copilot use `--ide copilot`. Follow the one "Last step" line it prints (for example, enabling the MCP server in Cursor).
@@ -41,8 +41,8 @@ You will see the agent:
 ## 4. Check the result yourself
 
 ```bash
-npx veratum status    # contract, ledger, is the evidence fresh?   (in chat: /veratum status)
-npx veratum brain show
+python .veratum/engine/veratum_cli.py status    # contract, ledger, is the evidence fresh?   (in chat: /veratum status)
+python .veratum/engine/veratum_cli.py brain show
 ```
 
 ## 5. Commit the memory

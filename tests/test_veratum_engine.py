@@ -1051,7 +1051,7 @@ class TestInstaller(VeratumTestCase):
     def test_init_without_ide_fails_with_per_ide_commands(self):
         code, out = self.node("init")
         self.assertEqual(code, 1)
-        self.assertIn("npx veratum init --ide cursor", out)
+        self.assertIn("npx github:yadavmandeep/Veratum init --ide cursor", out)
         self.assertFalse((self.tmp / ".cursor").exists())
 
     def test_init_autodetects_ide_from_project(self):
@@ -1089,20 +1089,31 @@ class TestInstaller(VeratumTestCase):
         self.assertEqual(self.json_file(".veratum/config.json")["enforcement"], "strict")
 
     def test_slash_command_installed_and_removed_per_ide(self):
-        files = {"claude-code": ".claude/commands/veratum.md", "cursor": ".cursor/commands/veratum.md",
-                 "opencode": ".opencode/command/veratum.md", "copilot": ".github/prompts/veratum.prompt.md",
-                 "windsurf": ".windsurf/workflows/veratum.md", "antigravity": ".agents/workflows/veratum.md"}
+        patterns = {"claude-code": ".claude/commands/{}.md", "cursor": ".cursor/commands/{}.md",
+                    "opencode": ".opencode/command/{}.md", "copilot": ".github/prompts/{}.prompt.md",
+                    "windsurf": ".windsurf/workflows/{}.md", "antigravity": ".agents/workflows/{}.md"}
+        names = ("veratum",)  # ONE command with one grammar: /veratum <area> <action> [arguments]
+        files = {(ide, name): pat.format(name) for ide, pat in patterns.items() for name in names}
         self.write(".claude/commands/mine.md", "my own command\n")
-        self.assertEqual(self.node("init", "--all")[0], 0)
-        for ide, rel in files.items():
+        code, out = self.node("init", "--all")
+        self.assertEqual(code, 0, out)
+        self.assertIn("/veratum graph build", out)  # the install summary teaches the short commands
+        self.assertIn("/veratum graph query", out)
+        self.assertIn("/veratum status", out)
+        self.assertNotIn(".veratum/engine/veratum_cli.py doctor", out)
+        self.assertEqual(sorted(p.name for p in (self.tmp / ".claude/commands").iterdir()), ["mine.md", "veratum.md"])
+        for (ide, name), rel in files.items():
             text = (self.tmp / rel).read_text(encoding="utf-8")
-            self.assertIn("graph query", text, ide)
-            self.assertNotIn("{{ARGS}}", text, ide)
-        self.assertIn("$ARGUMENTS", (self.tmp / files["claude-code"]).read_text(encoding="utf-8"))
-        self.assertTrue((self.tmp / files["claude-code"]).read_text(encoding="utf-8").startswith("---\n"))
+            for sub in ("graph build", "graph query", "graph export", "impact <file>", "config"):
+                self.assertIn(sub, text, (ide, sub))
+            self.assertNotIn("{{ARGS}}", text, (ide, name))
+        claude_graph = (self.tmp / files[("claude-code", "veratum")]).read_text(encoding="utf-8")
+        self.assertIn("$ARGUMENTS", claude_graph)
+        self.assertTrue(claude_graph.startswith("---\n"))
+        self.assertIn("argument-hint", claude_graph)
         self.assertFalse((self.tmp / ".clinerules").is_dir())  # Cline keeps its single rules file
         self.write("app.py", "def login(user):\n    return user\n")
-        code, out = self.node("graph", "query", "login")  # the `npx veratum graph ...` form the README shows
+        code, out = self.node("graph", "query", "login")  # the `python .veratum/engine/veratum_cli.py graph ...` form the README shows
         self.assertEqual(code, 0, out)
         self.assertIn("NODE login (function)", out)
         self.assertEqual(self.node("update")[0], 0)  # idempotent

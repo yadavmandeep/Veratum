@@ -16,7 +16,7 @@ Veratum is the same protocol everywhere, but IDEs expose different extension poi
 | Completion gate on stop | **hook** | **hook** | **hook** (follow-up message) | MCP `check_gate` | MCP `check_gate` | MCP `check_gate` | MCP `check_gate` |
 | Tamper / destructive-git guard | **hook** | **hook** | **hook** (shell) | — | — | — | **plugin** |
 | "Use the code graph" reminder before Grep/Glob | **hook** (tool names assumed) | **hook** (`Glob\|Grep`) | rule text only | rule text only | rule text only | rule text only | **plugin** (`grep`, `glob`) |
-| `/veratum` shortcut | workflow | command | command | workflow | — | prompt file | command |
+| `/veratum <area> <action>` shortcut (graph build, graph query, status, gate, impact, ...) | workflow | command | command | workflow | — | prompt file | command |
 
 **Bold** = mechanical. Everything else depends on the agent following the rules and calling the tools. The cryptographic check inside `gate` is always mechanical: when the gate runs, a stale or missing proof **cannot** pass, on any host.
 
@@ -29,9 +29,9 @@ Veratum is the same protocol everywhere, but IDEs expose different extension poi
 ## VS Code Extensions Matrix
 
 VS Code hosts multiple AI assistants. Choose the adapter that corresponds to the extension you run inside VS Code:
-- **GitHub Copilot**: `npx veratum init --ide copilot` (rules in `.github/copilot-instructions.md`, tools in `.vscode/mcp.json`)
-- **Cline / Roo Code**: `npx veratum init --ide cline` (rules in `.clinerules`)
-- **Claude Code CLI** (in VS Code integrated terminal): `npx veratum init --ide claude-code` (rules in `CLAUDE.md`, hooks in `.claude/settings.json`)
-- **Google Antigravity**: `npx veratum init --ide antigravity` (skill in `.agents/skills/veratum`, hooks in `.agents/plugins/veratum`)
+- **GitHub Copilot**: `npx github:yadavmandeep/Veratum init --ide copilot` (rules in `.github/copilot-instructions.md`, tools in `.vscode/mcp.json`)
+- **Cline / Roo Code**: `npx github:yadavmandeep/Veratum init --ide cline` (rules in `.clinerules`)
+- **Claude Code CLI** (in VS Code integrated terminal): `npx github:yadavmandeep/Veratum init --ide claude-code` (rules in `CLAUDE.md`, hooks in `.claude/settings.json`)
+- **Google Antigravity**: `npx github:yadavmandeep/Veratum init --ide antigravity` (skill in `.agents/skills/veratum`, hooks in `.agents/plugins/veratum`)
 
-Multiple extensions in the same repository can be configured together (`npx veratum init --ide copilot --ide antigravity`) and will share the same `.veratum/` memory and evidence ledger.
+Multiple extensions in the same repository can be configured together (`npx github:yadavmandeep/Veratum init --ide copilot --ide antigravity`) and will share the same `.veratum/` memory and evidence ledger.

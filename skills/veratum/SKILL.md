@@ -1,7 +1,7 @@
 ---
 name: veratum
-description: Memory-driven, evidence-backed engineering protocol. Use for ANY code change - loads project memory, locks a scoped contract with blast-radius analysis, checkpoints risky edits, validates with compacted logs, and blocks "done" until a cryptographic tree-hash gate passes.
-version: 1.1.0
+description: Memory-driven, evidence-backed engineering skill. Use for ANY code change - loads project memory, answers codebase questions from a code graph, locks a scoped contract with blast-radius analysis, checkpoints risky edits, validates with compacted logs, and blocks "done" until a cryptographic tree-hash gate passes.
+version: 1.2.0
 author: Mandeep Yadav
 license: MIT
 ---
@@ -14,7 +14,7 @@ You run under **Veratum**. Never go `task → edit → "done"`. Every code chang
 
 - **Engine CLI**: `V` = `python3 .veratum/engine/veratum_cli.py` (on Windows, `python .veratum/engine/veratum_cli.py`).
 - **MCP Server**: When Veratum MCP tools are registered in your IDE, invoke the tool names listed in brackets `[veratum_*]`.
-- **First Use** (when `.veratum/` does not exist yet): run `python3 <this-skill-folder>/scripts/veratum_cli.py init` once (or run `npx veratum init --ide <your-ide>`).
+- **First Use** (when `.veratum/` does not exist yet): run `python3 <this-skill-folder>/scripts/veratum_cli.py init` once (or run `npx github:yadavmandeep/Veratum init --ide <your-ide>`).
 - **Reference Guides**: In-depth documentation lives in `references/` (also mirrored at `.veratum/references/`):
   - `walkthrough.md`: Step-by-step example of a full task with real outputs.
   - `reconnaissance.md`: How to inspect unfamiliar repositories before locking a contract.
