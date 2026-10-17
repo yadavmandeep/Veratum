@@ -33,14 +33,16 @@ Use Veratum to fix this bug and verify the result.
 Pick **your** IDE or AI coding tool.
 
 ### One-Command Full Setup (Recommended)
-Installs the runtime engine, project memory (`.veratum/`), rules, MCP server, and native hooks in one step:
+Run this inside the project you want to use Veratum in (a brand-new project or one that already has code):
 
 ```bash
 npx github:yadavmandeep/Veratum init --ide antigravity   # or claude-code | cursor | windsurf | cline | copilot | opencode
 ```
 *Run `npx github:yadavmandeep/Veratum init` with no flags for an interactive picker that auto-detects your editors.*
 
-| IDE / Extension | Full Setup (Engine + Rules + MCP + Hooks) | Skill-only (`skills.sh`) |
+**What you get:** the runtime engine and project memory (`.veratum/`), the always-on rules, the MCP server and native hooks where your editor supports them, the **code graph** (builds itself the first time a session starts, and stays fresh), and the `/veratum` command (`/veratum graph build`, `/veratum graph query <question>`, `/veratum status`, ...). When it finishes, the installer prints the commands to type. Restart your editor (Claude Code: restart or open `/hooks`) so it loads them. Updating later: the same command with `update` instead of `init`.
+
+| IDE / Extension | Full Setup (Engine + Rules + MCP + Hooks + Code graph + `/veratum`) | Skill-only (`skills.sh`) |
 |---|---|---|
 | **Google Antigravity** | `npx github:yadavmandeep/Veratum init --ide antigravity` | `npx skills add yadavmandeep/veratum --skill veratum --agent antigravity --yes` |
 | **Claude Code** | `npx github:yadavmandeep/Veratum init --ide claude-code` | `npx skills add yadavmandeep/veratum --skill veratum --agent claude-code --yes` |
