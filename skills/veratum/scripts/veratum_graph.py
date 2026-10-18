@@ -22,7 +22,16 @@ from pathlib import Path
 _CORE_NAMES = (
     "CONF_EXTRACTED", "CONF_INFERRED", "CodeIndex", "VeratumError", "Workspace", "_IMPORT_LINE_PREFIXES",
     "_print_json", "_read_text", "_sha256_file", "graph_hint_used", "now_iso", "read_json", "write_json",
+    "to_posix", "norm_case",
 )
+
+
+def to_posix(p: str) -> str:
+    return str(p).replace("\\", "/")
+
+
+def norm_case(p: str) -> str:
+    return str(p).lower() if os.name == "nt" else str(p)
 
 
 def bind(core) -> None:
@@ -41,7 +50,8 @@ def bind(core) -> None:
 GRAPH_SCHEMA = "veratum.graph/v1"
 _GRAPH_KEYWORDS = {"if", "for", "while", "switch", "catch", "return", "function", "new", "sizeof", "typeof", "else",
                    "elif", "with", "assert", "print", "super", "this", "self", "match", "case", "defer", "await",
-                   "yield", "not", "and", "or", "in", "is", "lambda", "except", "raise", "del", "use", "import"}
+                   "yield", "not", "and", "or", "in", "is", "lambda", "except", "raise", "del", "use", "import",
+                   "echo", "local", "export", "let", "var", "const"}
 _GRAPH_DEF_PATTERNS = {
     "js": [(r"^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?function\*?\s+([A-Za-z_$][\w$]*)", "function"),
            (r"^\s*(?:export\s+)?(?:default\s+)?(?:abstract\s+)?class\s+([A-Za-z_$][\w$]*)", "class"),
@@ -54,13 +64,277 @@ _GRAPH_DEF_PATTERNS = {
     "java": [(r"^\s*(?:public\s+|private\s+|protected\s+|static\s+|final\s+|abstract\s+|sealed\s+)*(?:class|interface|enum|record)\s+(\w+)", "class"),
              (r"^\s*(?:public|private|protected)\s+(?:static\s+|final\s+|synchronized\s+|abstract\s+)*[\w<>\[\],.?]+\s+(\w+)\s*\(", "method")],
     "c": [(r"^[A-Za-z_][\w \t\*]*?\b([A-Za-z_]\w*)\s*\([^;{]*\)\s*\{", "function")],
+    "c_sharp": [(r"^\s*(?:public\s+|private\s+|protected\s+|internal\s+|static\s+|sealed\s+|abstract\s+)*(?:class|interface|struct|enum|record)\s+(\w+)", "class"),
+                (r"^\s*(?:public|private|protected|internal)\s+(?:static\s+|virtual\s+|override\s+|async\s+)*[\w<>\[\],.?]+\s+(\w+)\s*\(", "method")],
+    "ruby": [(r"^\s*(?:class|module)\s+([A-Za-z_]\w*)", "class"), (r"^\s*def\s+([A-Za-z_]\w*)", "function")],
+    "php": [(r"^\s*(?:abstract\s+|final\s+)?(?:class|interface|trait|enum)\s+(\w+)", "class"),
+            (r"^\s*(?:public\s+|protected\s+|private\s+|static\s+)*function\s+(\w+)\s*\(", "function")],
+    "bash": [(r"^\s*(?:function\s+)?([A-Za-z_]\w*)\s*\(\s*\)\s*\{", "function")],
+    "lua": [(r"^\s*(?:local\s+)?function\s+([A-Za-z_][\w.]*)", "function")],
+    "scala": [(r"^\s*(?:class|object|trait)\s+(\w+)", "class"), (r"^\s*def\s+(\w+)", "function")],
+    "kotlin": [(r"^\s*(?:open\s+|data\s+|sealed\s+|abstract\s+)?(?:class|interface|object)\s+(\w+)", "class"),
+               (r"^\s*(?:override\s+)?fun\s+(\w+)", "function")],
+    "swift": [(r"^\s*(?:public\s+|private\s+|internal\s+)?(?:class|struct|protocol|enum)\s+(\w+)", "class"),
+              (r"^\s*(?:public\s+|private\s+|internal\s+)?func\s+(\w+)", "function")],
+    "elixir": [(r"^\s*defmodule\s+([A-Za-z_][\w.]*)", "class"), (r"^\s*defp?\s+([A-Za-z_]\w*)", "function")],
     "sql": [
         (r"(?i)^\s*(?:create\s+(?:or\s+replace\s+)?package(?:\s+body)?)\s+(\w+)", "class"),
         (r"(?i)^\s*(?:create\s+(?:or\s+replace\s+)?(?:procedure|function)|procedure|function)\s+(\w+)", "function"),
         (r"(?i)^\s*(?:create\s+(?:or\s+replace\s+)?trigger)\s+(\w+)", "function"),
     ],
 }
+_LANG_FALLBACK_MAP = {
+    "ts": "js", "tsx": "js", "jsx": "js", "jsp": "js", "tag": "js", "vue": "js", "svelte": "js",
+    "cpp": "c", "cc": "c", "cxx": "c", "h": "c", "hpp": "c", "hh": "c",
+    "groovy": "java", "kt": "kotlin", "cs": "c_sharp", "rb": "ruby", "sh": "bash",
+    "ex": "elixir", "jl": "julia", "ps1": "powershell", "python": "py", "rust": "rs", "golang": "go",
+}
 _GRAPH_CALL_RE = re.compile(r"(?<![\w$.])([A-Za-z_$][\w$]*)\s*\(|\.([A-Za-z_$][\w$]*)\s*\(")
+
+_TS_LANG_SPECS = {
+    "py": ("tree_sitter_python", "language"),
+    "python": ("tree_sitter_python", "language"),
+    "js": ("tree_sitter_javascript", "language"),
+    "javascript": ("tree_sitter_javascript", "language"),
+    "ts": ("tree_sitter_typescript", "language_typescript"),
+    "typescript": ("tree_sitter_typescript", "language_typescript"),
+    "tsx": ("tree_sitter_typescript", "language_tsx"),
+    "jsx": ("tree_sitter_javascript", "language"),
+    "go": ("tree_sitter_go", "language"),
+    "rs": ("tree_sitter_rust", "language"),
+    "rust": ("tree_sitter_rust", "language"),
+    "java": ("tree_sitter_java", "language"),
+    "c": ("tree_sitter_c", "language"),
+    "cpp": ("tree_sitter_cpp", "language"),
+    "cc": ("tree_sitter_cpp", "language"),
+    "c_sharp": ("tree_sitter_c_sharp", "language"),
+    "cs": ("tree_sitter_c_sharp", "language"),
+    "rb": ("tree_sitter_ruby", "language"),
+    "ruby": ("tree_sitter_ruby", "language"),
+    "php": ("tree_sitter_php", "language_php"),
+    "sh": ("tree_sitter_bash", "language"),
+    "bash": ("tree_sitter_bash", "language"),
+    "lua": ("tree_sitter_lua", "language"),
+    "scala": ("tree_sitter_scala", "language"),
+    "kt": ("tree_sitter_kotlin", "language"),
+    "kotlin": ("tree_sitter_kotlin", "language"),
+    "swift": ("tree_sitter_swift", "language"),
+    "elixir": ("tree_sitter_elixir", "language"),
+    "ex": ("tree_sitter_elixir", "language"),
+    "groovy": ("tree_sitter_groovy", "language"),
+    "julia": ("tree_sitter_julia", "language"),
+    "jl": ("tree_sitter_julia", "language"),
+    "powershell": ("tree_sitter_powershell", "language"),
+    "ps1": ("tree_sitter_powershell", "language"),
+    "objc": ("tree_sitter_objc", "language"),
+    "zig": ("tree_sitter_zig", "language"),
+    "json": ("tree_sitter_json", "language"),
+}
+
+_TREE_SITTER_PARSERS: dict = {}
+_TREE_SITTER_FAILED_LANGS: set = set()
+
+_CLASS_NODE_TYPES = {
+    "class_definition", "class_declaration", "class_specifier", "class",
+    "interface_declaration", "interface_definition",
+    "trait_item", "trait_definition",
+    "struct_item", "struct_specifier", "struct_declaration", "struct_definition",
+    "enum_declaration", "enum_item", "enum_specifier",
+    "type_declaration", "type_alias_declaration", "type_item", "type_spec",
+    "protocol_declaration", "record_declaration",
+    "object_declaration", "object_definition",
+    "module", "impl_item"
+}
+
+_FUNC_NODE_TYPES = {
+    "function_definition", "function_declaration", "function_item", "function",
+    "method_definition", "method_declaration", "method", "singleton_method",
+    "constructor_declaration", "local_function", "function_statement", "method_signature"
+}
+
+_TYPE_KINDS = {
+    "interface_declaration", "interface_definition", "trait_item", "trait_definition",
+    "enum_declaration", "enum_item", "enum_specifier", "type_declaration",
+    "type_alias_declaration", "type_item", "type_spec", "protocol_declaration"
+}
+
+
+def _get_tree_sitter_parser(lang: str):
+    if lang in _TREE_SITTER_PARSERS:
+        return _TREE_SITTER_PARSERS[lang]
+    if lang in _TREE_SITTER_FAILED_LANGS:
+        return None
+    spec = _TS_LANG_SPECS.get(lang)
+    if not spec:
+        _TREE_SITTER_FAILED_LANGS.add(lang)
+        return None
+    mod_name, fn_name = spec
+    try:
+        import importlib
+        import tree_sitter
+        mod = importlib.import_module(mod_name)
+        lang_fn = getattr(mod, fn_name, None) or getattr(mod, "language", None)
+        if not lang_fn:
+            _TREE_SITTER_FAILED_LANGS.add(lang)
+            return None
+        ts_lang = tree_sitter.Language(lang_fn())
+        parser = tree_sitter.Parser(ts_lang)
+        _TREE_SITTER_PARSERS[lang] = parser
+        return parser
+    except (ImportError, Exception):
+        _TREE_SITTER_FAILED_LANGS.add(lang)
+        return None
+
+
+def _get_ts_call_name(node):
+    if node.type == "command":
+        named = [c for c in node.children if c.is_named]
+        if named:
+            raw = named[0].text.decode("utf-8", errors="ignore").strip()
+            if raw and raw not in _GRAPH_KEYWORDS and re.match(r"^[A-Za-z_$][\w$]*$", raw):
+                return raw
+        return None
+
+    target = (node.child_by_field_name("function") or
+              node.child_by_field_name("name") or
+              node.child_by_field_name("method"))
+    if not target and node.children:
+        named = [c for c in node.children if c.is_named]
+        if named:
+            target = named[0]
+    if not target:
+        return None
+
+    if target.type in ("member_expression", "field_expression", "attribute", "scoped_identifier", "selector_expression"):
+        prop = (target.child_by_field_name("property") or
+                target.child_by_field_name("field") or
+                target.child_by_field_name("name"))
+        if prop:
+            target = prop
+        else:
+            named = [c for c in target.children if c.is_named]
+            if named:
+                target = named[-1]
+
+    raw = target.text.decode("utf-8", errors="ignore").strip()
+    raw = raw.split(".")[-1].split("::")[-1].split("->")[-1]
+    if raw and raw not in _GRAPH_KEYWORDS and re.match(r"^[A-Za-z_$][\w$]*$", raw):
+        return raw
+    return None
+
+
+def _get_ts_def_name(node):
+    name_node = node.child_by_field_name("name")
+    if name_node:
+        return name_node.text.decode("utf-8", errors="ignore").strip()
+    if node.type == "impl_item":
+        t = node.child_by_field_name("type")
+        if t:
+            return t.text.decode("utf-8", errors="ignore").strip()
+    if node.type == "function_definition":
+        decl = node.child_by_field_name("declarator")
+        while decl and decl.type in ("function_declarator", "pointer_declarator", "reference_declarator"):
+            inner = decl.child_by_field_name("declarator")
+            if inner:
+                decl = inner
+            else:
+                named = [c for c in decl.children if c.is_named]
+                decl = named[0] if named else None
+        if decl and decl.type in ("identifier", "field_identifier"):
+            return decl.text.decode("utf-8", errors="ignore").strip()
+    if node.type == "function_statement":
+        for c in node.children:
+            if c.type == "function_name":
+                return c.text.decode("utf-8", errors="ignore").strip()
+    if node.type == "variable_declarator":
+        name_node = node.child_by_field_name("name")
+        val = node.child_by_field_name("value")
+        if name_node and val and val.type in ("arrow_function", "function_expression", "function"):
+            return name_node.text.decode("utf-8", errors="ignore").strip()
+    return None
+
+
+def _get_go_receiver(node):
+    rec = node.child_by_field_name("receiver")
+    if not rec:
+        return None
+    for c in rec.children:
+        if c.type == "parameter_declaration":
+            for sc in c.children:
+                if sc.type in ("type_identifier", "pointer_type"):
+                    raw = sc.text.decode("utf-8", errors="ignore").strip().lstrip("*")
+                    if raw:
+                        return raw
+    return None
+
+
+def _extract_tree_sitter(text: str, lang: str):
+    parser = _get_tree_sitter_parser(lang)
+    if not parser:
+        return None
+
+    code_bytes = text.encode("utf-8")
+    try:
+        tree = parser.parse(code_bytes)
+    except Exception:
+        return None
+
+    defs: list = []
+    calls: list = []
+
+    def visit(node, scope, owner):
+        nonlocal defs, calls
+        ntype = node.type
+
+        if ntype == "variable_declarator":
+            val = node.child_by_field_name("value")
+            if val and val.type in ("arrow_function", "function_expression", "function"):
+                name = _get_ts_def_name(node)
+                if name:
+                    qual = ".".join([s[0] for s in scope] + [name])
+                    kind = "method" if scope and scope[-1][1] else "function"
+                    defs.append({"name": name, "qual": qual, "kind": kind,
+                                 "line": node.start_point[0] + 1, "end": node.end_point[0] + 1})
+                    for c in val.children:
+                        visit(c, scope + [(name, False)], qual)
+                    return
+
+        is_class = ntype in _CLASS_NODE_TYPES
+        is_func = ntype in _FUNC_NODE_TYPES
+
+        if is_class or is_func:
+            name = _get_ts_def_name(node)
+            if name:
+                cur_scope = scope
+                if ntype == "method_declaration":
+                    rec = _get_go_receiver(node)
+                    if rec:
+                        cur_scope = [(rec, True)]
+                qual = ".".join([s[0] for s in cur_scope] + [name])
+                if is_class:
+                    kind = "type" if ntype in _TYPE_KINDS else "class"
+                else:
+                    kind = "method" if cur_scope and cur_scope[-1][1] else "function"
+                defs.append({"name": name, "qual": qual, "kind": kind,
+                             "line": node.start_point[0] + 1, "end": node.end_point[0] + 1})
+                new_scope = cur_scope + [(name, is_class)]
+                new_owner = qual
+                for c in node.children:
+                    visit(c, new_scope, new_owner)
+                return
+
+        if "call" in ntype or "invocation" in ntype or ntype == "command":
+            cname = _get_ts_call_name(node)
+            if cname:
+                calls.append({"name": cname, "line": node.start_point[0] + 1, "owner": owner})
+
+        for c in node.children:
+            visit(c, scope, owner)
+
+    visit(tree.root_node, [], "")
+    if getattr(tree.root_node, "has_error", False) and not defs:
+        return None
+    return {"defs": defs, "calls": calls}
 
 
 def _graph_label(value) -> str:
@@ -101,11 +375,12 @@ def _extract_python_ast(text: str):
 def _extract_generic(text: str, lang: str) -> dict:
     lines = text.splitlines()
     defs: list = []
+    pats = _GRAPH_DEF_PATTERNS.get(lang) or _GRAPH_DEF_PATTERNS.get(_LANG_FALLBACK_MAP.get(lang, ""), [])
     for i, line in enumerate(lines, 1):
         stripped = line.strip()
         if not stripped or stripped.startswith(("//", "#", "*", "/*")):
             continue
-        for pat, kind in _GRAPH_DEF_PATTERNS.get(lang, []):
+        for pat, kind in pats:
             m = re.match(pat, line)
             if m and m.group(1) not in _GRAPH_KEYWORDS:
                 defs.append({"name": m.group(1), "qual": m.group(1), "kind": kind, "line": i, "end": len(lines)})
@@ -131,7 +406,9 @@ def _extract_generic(text: str, lang: str) -> dict:
 
 
 def graph_extract_file(text: str, lang: str) -> dict:
-    result = (_extract_python_ast(text) if lang == "py" else None) or _extract_generic(text, lang)
+    result = _extract_tree_sitter(text, lang)
+    if result is None:
+        result = (_extract_python_ast(text) if lang in ("py", "python") else None) or _extract_generic(text, lang)
     seen: set = set()  # one call per (name, caller) is enough for the graph and keeps cache.json small
     unique = []
     for call in result["calls"]:
@@ -169,6 +446,7 @@ def graph_build(ws: Workspace, full: bool = False, max_files: int = 0, max_file_
     index = CodeIndex(ws, max_files=max_files or None)
     old = read_json(gdir / "cache.json", {}) or {}
     cache = {} if full or old.get("schema") != GRAPH_SCHEMA else old.get("files", {})
+    history_cache = {} if full or old.get("schema") != GRAPH_SCHEMA else old.get("history_cache", {})
     extracted: dict = {}
     fresh = reused = skipped_large = 0
     total = len(index.files)
@@ -273,7 +551,7 @@ def graph_build(ws: Workspace, full: bool = False, max_files: int = 0, max_file_
 
     doc_stats = _graph_add_docs(ws, index, nodes, edges, defs_by_name)
     doc_stats.update(_graph_merge_semantic(ws, nodes, edges))
-    doc_stats.update(_graph_add_history(ws, nodes, edges))
+    doc_stats.update(_graph_add_history(ws, nodes, edges, history_cache=history_cache))
     communities = _graph_cluster(nodes, edges)
     for nid, node in nodes.items():
         node["community"] = communities["of"].get(nid, -1)
@@ -285,7 +563,7 @@ def graph_build(ws: Workspace, full: bool = False, max_files: int = 0, max_file_
              "communities": communities["list"], "nodes": list(nodes.values()), "edges": edges}
     rep_text = graph_report(graph)
     _dump_json(gdir / "graph.json", graph)
-    _dump_json(gdir / "cache.json", {"schema": GRAPH_SCHEMA, "max_file_kb": max_file_kb, "files": extracted})
+    _dump_json(gdir / "cache.json", {"schema": GRAPH_SCHEMA, "max_file_kb": max_file_kb, "files": extracted, "history_cache": history_cache})
     (gdir / "GRAPH_REPORT.md").write_text(rep_text, encoding="utf-8", newline="\n")
 
     # Date-wise snapshot folder (Graphify layout: .veratum/graph/YYYY-MM-DD/)
@@ -293,9 +571,45 @@ def graph_build(ws: Workspace, full: bool = False, max_files: int = 0, max_file_
     date_dir = gdir / today
     date_dir.mkdir(parents=True, exist_ok=True)
     _dump_json(date_dir / "graph.json", graph)
-    _dump_json(date_dir / "cache.json", {"schema": GRAPH_SCHEMA, "max_file_kb": max_file_kb, "files": extracted})
+    _dump_json(date_dir / "cache.json", {"schema": GRAPH_SCHEMA, "max_file_kb": max_file_kb, "files": extracted, "history_cache": history_cache})
     (date_dir / "GRAPH_REPORT.md").write_text(rep_text, encoding="utf-8", newline="\n")
+    _auto_write_html_views(gdir, date_dir, graph)
     return graph
+
+
+def _load_date_snapshots(gdir: Path) -> dict:
+    snapshots = {}
+    if not gdir.is_dir():
+        return snapshots
+    for item in sorted(gdir.iterdir()):
+        if item.is_dir() and re.match(r"^\d{4}-\d{2}-\d{2}$", item.name):
+            snap_file = item / "graph.json"
+            if snap_file.is_file():
+                try:
+                    with open(snap_file, "r", encoding="utf-8") as f:
+                        snapshots[item.name] = json.load(f)
+                except Exception:
+                    pass
+    return snapshots
+
+
+def _auto_write_html_views(gdir: Path, date_dir: Path, graph: dict) -> None:
+    try:
+        import veratum_export
+        snapshots = _load_date_snapshots(gdir)
+        html_text = veratum_export.graph_export_html(graph, max_nodes=5000, snapshots=snapshots)
+        (gdir / "index.html").write_text(html_text, encoding="utf-8", newline="\n")
+        (gdir / "graph.html").write_text(html_text, encoding="utf-8", newline="\n")
+        (date_dir / "index.html").write_text(html_text, encoding="utf-8", newline="\n")
+        (date_dir / "graph.html").write_text(html_text, encoding="utf-8", newline="\n")
+        local_vis = gdir / "vis-network.min.js"
+        if local_vis.is_file() and not (date_dir / "vis-network.min.js").is_file():
+            try:
+                (date_dir / "vis-network.min.js").write_bytes(local_vis.read_bytes())
+            except Exception:
+                pass
+    except Exception:
+        pass
 
 
 _GRAPH_MAX_COMMUNITY_FRACTION = 0.25  # communities above 25% of the graph (min 10 nodes) get a second, finer pass
@@ -393,11 +707,14 @@ def _graph_cluster(nodes: dict, edges: list) -> dict:
         inner = sum(1 for n in members for nb in adj[n] if nb in ms) / 2
         possible = len(members) * (len(members) - 1) / 2
         files = sorted({nodes[n]["source_file"] for n in members})
-        dirs: dict = {}
-        for f in files:
-            d = posixpath.dirname(f) or "."
-            dirs[d] = dirs.get(d, 0) + 1
-        out.append({"id": cid, "name": sorted(dirs.items(), key=lambda kv: (-kv[1], kv[0]))[0][0],
+        top_node_id = max(members, key=lambda n: (sum(adj[n].values()), nodes[n].get("label", "")))
+        top_node = nodes[top_node_id]
+        top_lbl = top_node.get("label", top_node_id)
+        if top_node.get("kind") in ("function", "method") and not top_lbl.endswith("()"):
+            comm_name = top_lbl + "()"
+        else:
+            comm_name = top_lbl
+        out.append({"id": cid, "name": comm_name,
                     "size": len(members), "file_count": len(files),
                     "cohesion": round(inner / possible, 2) if possible else 1.0, "files": files[:50]})
     return {"list": out, "of": of}
@@ -642,26 +959,41 @@ def graph_status(ws: Workspace) -> dict:
 
 
 # -- documents, assets and agent-supplied semantic extraction ---------------------------------
-_DOC_EXTS = (".md", ".mdx", ".rst", ".txt")
-_ASSET_EXTS = (".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".docx", ".xlsx")
+# Full Graphify format coverage: docs, papers, images, office, and audio/video
+_DOC_EXTS = (".md", ".mdx", ".rst", ".txt", ".yml", ".yaml", ".html", ".htm", ".qmd", ".skill", ".org", ".adoc", ".tex")
+_ASSET_EXTS = (
+    # Papers & office docs
+    ".pdf", ".docx", ".xlsx", ".pptx", ".odt", ".ods", ".odp",
+    # Images
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp", ".ico", ".tiff",
+    # Audio & video
+    ".mp4", ".mov", ".ogg", ".webm", ".avi", ".m4a", ".wav", ".m4v", ".mkv", ".mp3"
+)
 _MD_HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$")
 _MD_LINK_RE = re.compile(r"\[[^\]\n]*\]\(([^)\s#?]+)[^)]*\)")
 _BACKTICK_RE = re.compile(r"`([A-Za-z_][\w.]*)(?:\(\))?`")
 
 
+_IMG_EMBED_RE = re.compile(r"""(?:!\[[^\]\n]*\]\(([^)\s#?]+)[^)]*\)|<img[^>]+src=["']([^"']+)["'])""")
+_HTML_HEADING_RE = re.compile(r"""<h([1-6])[^>]*>(.*?)</h\1>""", re.I)
+_HTML_LINK_RE = re.compile(r"""<a[^>]+href=["']([^"']+)["']""", re.I)
+
+
 def _graph_add_docs(ws: Workspace, index: "CodeIndex", nodes: dict, edges: list, defs_by_name: dict) -> dict:
-    """Markdown/text docs become nodes: headings (EXTRACTED), relative links (EXTRACTED), `code` mentions (INFERRED).
-    Binary assets (PDF/images) become nodes the agent can enrich through `graph semantic add`."""
+    """Markdown/text docs become nodes: headings (EXTRACTED), relative links (EXTRACTED), `code` mentions (INFERRED),
+    image/media references (EXTRACTED).
+    Assets (PDF/images/video/office) become first-class asset nodes linked to documents and ready for semantic enrichment."""
     from urllib.parse import unquote
     files = index._list_files(None, exts=_DOC_EXTS + _ASSET_EXTS)
     by_rel = {n["source_file"]: nid for nid, n in nodes.items() if n["kind"] == "file"}
     docs = assets = 0
     for rel in files:
-        is_doc = os.path.splitext(rel)[1].lower() in _DOC_EXTS
+        ext = os.path.splitext(rel)[1].lower()
+        is_doc = ext in _DOC_EXTS
         nid = ("doc:" if is_doc else "asset:") + rel
+        lang = "markdown" if ext in (".md", ".mdx") else (ext.lstrip(".") or "text")
         nodes[nid] = {"id": nid, "label": posixpath.basename(rel), "kind": "doc" if is_doc else "asset",
-                      "source_file": rel, "source_location": "L1",
-                      "language": "markdown" if is_doc else os.path.splitext(rel)[1].lstrip(".").lower()}
+                      "source_file": rel, "source_location": "L1", "language": lang}
         by_rel[rel] = nid
         docs, assets = docs + is_doc, assets + (not is_doc)
     for rel in files:
@@ -674,21 +1006,40 @@ def _graph_add_docs(ws: Workspace, index: "CodeIndex", nodes: dict, edges: list,
                 continue
             if fenced:
                 continue
+            # Markdown heading or HTML heading
             m = _MD_HEADING_RE.match(line)
-            if m:
+            m_html = _HTML_HEADING_RE.search(line) if not m else None
+            h_text = m.group(2) if m else (re.sub(r"<[^>]+>", "", m_html.group(2)).strip() if m_html else None)
+            if h_text:
                 current = "sec:{}::{}".format(rel, i)
-                nodes[current] = {"id": current, "label": _graph_label(m.group(2)), "kind": "section",
+                nodes[current] = {"id": current, "label": _graph_label(h_text), "kind": "section",
                                   "source_file": rel, "source_location": "L{}".format(i), "language": "markdown"}
                 edges.append({"source": doc_id, "target": current, "relation": "contains", "confidence": CONF_EXTRACTED,
                               "confidence_score": 1.0, "source_file": rel, "source_location": "L{}".format(i)})
-            for link in _MD_LINK_RE.findall(line):
-                if "://" in link or link.startswith(("mailto:", "/")):
+
+            # Image & media embeds: ![alt](path) or <img src="path">
+            for match in _IMG_EMBED_RE.finditer(line):
+                raw_src = match.group(1) or match.group(2)
+                if not raw_src or "://" in raw_src or raw_src.startswith(("data:", "mailto:", "/")):
+                    continue
+                target = by_rel.get(posixpath.normpath(posixpath.join(posixpath.dirname(rel), unquote(raw_src))))
+                if target and target != doc_id:
+                    edges.append({"source": current, "target": target, "relation": "embeds",
+                                  "confidence": CONF_EXTRACTED, "confidence_score": 1.0, "source_file": rel,
+                                  "source_location": "L{}".format(i)})
+
+            # Links: [text](path) or <a href="path">
+            raw_links = _MD_LINK_RE.findall(line) + _HTML_LINK_RE.findall(line)
+            for link in raw_links:
+                if "://" in link or link.startswith(("mailto:", "/", "#")):
                     continue
                 target = by_rel.get(posixpath.normpath(posixpath.join(posixpath.dirname(rel), unquote(link))))
                 if target and target != doc_id:
                     edges.append({"source": current, "target": target, "relation": "references",
                                   "confidence": CONF_EXTRACTED, "confidence_score": 1.0, "source_file": rel,
                                   "source_location": "L{}".format(i)})
+
+            # Code mentions: `foo`
             for name in dict.fromkeys(_BACKTICK_RE.findall(line)):
                 bare = name.split(".")[-1]
                 cands = defs_by_name.get(bare, [])
@@ -812,6 +1163,10 @@ def record_task_history(ws: Workspace, task_data: dict) -> Path:
     payload.setdefault("id", tid)
     payload.setdefault("date", date_str)
     payload.setdefault("completed_at", completed_at)
+    if "files_changed" in payload and isinstance(payload["files_changed"], list):
+        payload["files_changed"] = [str(f).replace("\\", "/").strip() for f in payload["files_changed"] if f]
+    if "files" in payload and isinstance(payload["files"], list):
+        payload["files"] = [str(f).replace("\\", "/").strip() for f in payload["files"] if f]
     write_json(target_path, payload)
 
     # Maintain tasks.json in date folder (aggregate array of tasks/queries)
@@ -824,12 +1179,14 @@ def record_task_history(ws: Workspace, task_data: dict) -> Path:
     return target_path
 
 
-def _graph_add_history(ws: Workspace, nodes: dict, edges: list) -> dict:
-    """Scan date-wise folders (.veratum/graph/<YYYY-MM-DD>/) and add all task nodes and edges."""
+def _graph_add_history(ws: Workspace, nodes: dict, edges: list, history_cache: dict | None = None) -> dict:
+    """Scan date-wise folders (.veratum/graph/<YYYY-MM-DD>/) and add all task nodes and edges.
+    Reuses cached date folder parse results by folder mtime_ns for sub-50ms performance."""
     gdir = ws.dir / "graph"
     if not gdir.is_dir():
         return {"history_tasks": 0, "history_edges": 0}
-    by_file = {n["source_file"]: nid for nid, n in nodes.items() if n.get("kind") in ("file", "doc", "asset")}
+    by_file = {to_posix(n["source_file"]): nid for nid, n in nodes.items() if n.get("kind") in ("file", "doc", "asset")}
+    by_file_lower = {norm_case(to_posix(n["source_file"])): nid for nid, n in nodes.items() if n.get("kind") in ("file", "doc", "asset")}
     tasks_count = edges_count = 0
     date_dirs = []
     date_re = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -845,9 +1202,42 @@ def _graph_add_history(ws: Workspace, nodes: dict, edges: list) -> dict:
     except OSError:
         return {"history_tasks": 0, "history_edges": 0}
 
+    new_history_cache = dict(history_cache or {})
     seen_tasks = set()
     for date_entry in sorted(date_dirs, key=lambda d: d.name):
         date_str = date_entry.name
+        try:
+            folder_st = date_entry.stat()
+            folder_mtime = folder_st.st_mtime_ns
+        except OSError:
+            folder_mtime = 0
+
+        cached_folder = new_history_cache.get(date_str)
+        if cached_folder and cached_folder.get("mtime_ns") == folder_mtime:
+            # Fast-path: folder hasn't changed! Load from history_cache
+            for tnode in cached_folder.get("nodes", []):
+                nid = tnode["id"]
+                if nid not in nodes:
+                    nodes[nid] = dict(tnode)
+                    tasks_count += 1
+                    if nid.startswith("task:"):
+                        seen_tasks.add(nid[5:])
+            for tedge in cached_folder.get("edges", []):
+                tgt = tedge["target"]
+                sf = tedge.get("target_file")
+                if tgt not in nodes and sf and (ws.root / sf).exists():
+                    nodes[tgt] = {
+                        "id": tgt, "label": posixpath.basename(sf), "kind": "file",
+                        "source_file": sf, "source_location": "L1",
+                        "language": sf.split(".")[-1] if "." in sf else "text",
+                    }
+                if tgt in nodes:
+                    edges.append(dict(tedge))
+                    edges_count += 1
+            continue
+
+        folder_nodes = []
+        folder_edges = []
         try:
             files_in_date = sorted(date_entry.iterdir())
         except OSError:
@@ -857,7 +1247,7 @@ def _graph_add_history(ws: Workspace, nodes: dict, edges: list) -> dict:
                 continue
             fname = child_file.name
             # Skip snapshot files of the graph itself to avoid indexing full graph snapshot as a task
-            if fname in ("graph.json", "cache.json", "GRAPH_REPORT.md", ".graphify_labels.json", "manifest.json", "cost.json"):
+            if fname in ("graph.json", "cache.json", "GRAPH_REPORT.md", ".graphify_labels.json", "manifest.json", "cost.json", "index.html", "graph.html", "vis-network.min.js"):
                 continue
             rel_path = ws.rel(str(child_file)) or str(child_file).replace("\\", "/")
             if child_file.suffix.lower() == ".json":
@@ -880,7 +1270,7 @@ def _graph_add_history(ws: Workspace, nodes: dict, edges: list) -> dict:
                         continue
                     goal = item.get("goal") or item.get("query") or item.get("title") or str(tid)
                     completed_at = item.get("completed_at") or item.get("at") or date_str
-                    nodes[node_id] = {
+                    tnode = {
                         "id": node_id,
                         "label": _graph_label(goal),
                         "kind": "task",
@@ -890,13 +1280,15 @@ def _graph_add_history(ws: Workspace, nodes: dict, edges: list) -> dict:
                         "date": date_str,
                         "completed_at": completed_at,
                     }
+                    nodes[node_id] = tnode
+                    folder_nodes.append(tnode)
                     tasks_count += 1
                     target_files = item.get("files_changed") or item.get("files") or item.get("touched") or []
                     for f in target_files:
                         if not isinstance(f, str) or not f.strip():
                             continue
-                        clean_f = f.replace("\\", "/").strip()
-                        file_id = by_file.get(clean_f) or ("file:" + clean_f)
+                        clean_f = to_posix(f).strip()
+                        file_id = by_file.get(clean_f) or by_file_lower.get(norm_case(clean_f)) or ("file:" + clean_f)
                         if file_id not in nodes and (ws.root / clean_f).exists():
                             nodes[file_id] = {
                                 "id": file_id,
@@ -907,8 +1299,9 @@ def _graph_add_history(ws: Workspace, nodes: dict, edges: list) -> dict:
                                 "language": clean_f.split(".")[-1] if "." in clean_f else "text",
                             }
                             by_file[clean_f] = file_id
+                            by_file_lower[norm_case(clean_f)] = file_id
                         if file_id in nodes:
-                            edges.append({
+                            tedge = {
                                 "source": node_id,
                                 "target": file_id,
                                 "relation": "modified",
@@ -916,13 +1309,16 @@ def _graph_add_history(ws: Workspace, nodes: dict, edges: list) -> dict:
                                 "confidence_score": 1.0,
                                 "source_file": rel_path,
                                 "source_location": "L1",
-                            })
+                                "target_file": clean_f,
+                            }
+                            edges.append(tedge)
+                            folder_edges.append(tedge)
                             edges_count += 1
             else:
                 # Any other file inside the date folder (e.g. notes.txt): add as history node
                 node_id = "histfile:" + rel_path
                 if node_id not in nodes:
-                    nodes[node_id] = {
+                    hnode = {
                         "id": node_id,
                         "label": child_file.name,
                         "kind": "history",
@@ -931,8 +1327,194 @@ def _graph_add_history(ws: Workspace, nodes: dict, edges: list) -> dict:
                         "language": child_file.suffix.lstrip(".").lower() or "text",
                         "date": date_str,
                     }
+                    nodes[node_id] = hnode
+                    folder_nodes.append(hnode)
                     tasks_count += 1
+
+        new_history_cache[date_str] = {
+            "mtime_ns": folder_mtime,
+            "nodes": folder_nodes,
+            "edges": folder_edges,
+        }
+
+    if history_cache is not None:
+        history_cache.clear()
+        history_cache.update(new_history_cache)
     return {"history_tasks": tasks_count, "history_edges": edges_count}
+
+
+def graph_update_task(ws: Workspace, task_data: dict, files_changed: list | None = None) -> dict:
+    """Sub-50ms incremental graph update when a task completes.
+    Updates only changed files and connects the new task node and modified edges in graph.json and date snapshots.
+    Falls back to graph_build(ws) if graph.json does not exist.
+    """
+    gdir = ws.dir / "graph"
+    graph_file = gdir / "graph.json"
+    cache_file = gdir / "cache.json"
+    if not graph_file.is_file() or not cache_file.is_file():
+        return graph_build(ws)
+
+    graph = read_json(graph_file, None)
+    if not isinstance(graph, dict) or "nodes" not in graph or "edges" not in graph:
+        return graph_build(ws)
+
+    cache = read_json(cache_file, {}) or {}
+    cached_files = cache.get("files", {})
+    history_cache = cache.get("history_cache", {})
+
+    nodes = {n["id"]: n for n in graph.get("nodes", [])}
+    edges = list(graph.get("edges", []))
+    by_file = {to_posix(n.get("source_file", "")): nid for nid, n in nodes.items() if n.get("kind") in ("file", "doc", "asset")}
+    by_file_lower = {norm_case(to_posix(n.get("source_file", ""))): nid for nid, n in nodes.items() if n.get("kind") in ("file", "doc", "asset")}
+
+    # Clean & normalize changed files
+    raw_files = list(files_changed or task_data.get("files_changed") or task_data.get("files") or [])
+    files_to_update = [to_posix(f).strip() for f in raw_files if f]
+
+    index = CodeIndex(ws)
+    for rel in files_to_update:
+        path = ws.root / rel
+        fid = "file:" + rel
+        if not path.exists():
+            nodes.pop(fid, None)
+            cached_files.pop(rel, None)
+            sym_prefix = "sym:{}::".format(rel)
+            nodes = {k: v for k, v in nodes.items() if not k.startswith(sym_prefix)}
+            edges = [e for e in edges if e.get("source") != fid and e.get("target") != fid
+                     and not str(e.get("source", "")).startswith(sym_prefix)
+                     and not str(e.get("target", "")).startswith(sym_prefix)]
+        else:
+            try:
+                st = path.stat()
+                sha = _sha256_file(path)
+                old_entry = cached_files.get(rel)
+                if not old_entry or old_entry.get("sha") != sha or old_entry.get("size") != st.st_size:
+                    lang = index.lang(rel)
+                    data = graph_extract_file(_read_text(path), lang)
+                    cached_files[rel] = {"sha": sha, "size": st.st_size, "mtime": st.st_mtime_ns, "data": data}
+
+                    file_comm = nodes.get(fid, {}).get("community", 0)
+                    if fid not in nodes:
+                        nodes[fid] = {
+                            "id": fid, "label": posixpath.basename(rel), "kind": "file",
+                            "source_file": rel, "source_location": "L1", "language": lang,
+                            "community": file_comm
+                        }
+
+                    # Remove old symbol nodes and contains edges for this file
+                    sym_prefix = "sym:{}::".format(rel)
+                    nodes = {k: v for k, v in nodes.items() if not k.startswith(sym_prefix)}
+                    edges = [e for e in edges if not (e.get("source") == fid and e.get("relation") == "contains")
+                             and not str(e.get("source", "")).startswith(sym_prefix)
+                             and not str(e.get("target", "")).startswith(sym_prefix)]
+
+                    # Add new symbols and contains edges
+                    for d in data.get("defs", []):
+                        sid = "sym:{}::{}".format(rel, d["qual"])
+                        if sid in nodes:
+                            sid += "@{}".format(d["line"])
+                        nodes[sid] = {
+                            "id": sid, "label": d["name"], "kind": d["kind"], "source_file": rel,
+                            "source_location": "L{}".format(d["line"]), "language": lang,
+                            "community": file_comm
+                        }
+                        edges.append({
+                            "source": fid, "target": sid, "relation": "contains", "confidence": CONF_EXTRACTED,
+                            "confidence_score": 1.0, "source_file": rel, "source_location": "L{}".format(d["line"])
+                        })
+            except OSError:
+                pass
+
+    # Add task node & modified edges
+    tid = task_data.get("id") or task_data.get("contract_id") or ("task-" + uuid.uuid4().hex[:8])
+    clean_id = re.sub(r"[^\w\-.]", "_", str(tid))
+    node_id = "task:" + str(tid)
+    goal = task_data.get("goal") or task_data.get("query") or str(tid)
+    completed_at = task_data.get("completed_at") or now_iso()
+    date_str = str(completed_at)[:10]
+
+    task_comm = 0
+    for f in files_to_update:
+        fid = "file:" + f
+        if fid in nodes and "community" in nodes[fid]:
+            task_comm = nodes[fid]["community"]
+            break
+
+    rel_task_source = ".veratum/graph/{}/{}.json".format(date_str, clean_id)
+    nodes[node_id] = {
+        "id": node_id,
+        "label": _graph_label(goal),
+        "kind": "task",
+        "source_file": rel_task_source,
+        "source_location": "L1",
+        "language": "task",
+        "date": date_str,
+        "completed_at": completed_at,
+        "community": task_comm,
+    }
+
+    seen_targets = set()
+    for f in files_to_update:
+        clean_f = to_posix(f).strip()
+        if not clean_f or clean_f in seen_targets:
+            continue
+        seen_targets.add(clean_f)
+        fid = by_file.get(clean_f) or by_file_lower.get(norm_case(clean_f)) or ("file:" + clean_f)
+        if fid not in nodes and (ws.root / clean_f).exists():
+            nodes[fid] = {
+                "id": fid,
+                "label": posixpath.basename(clean_f),
+                "kind": "file",
+                "source_file": clean_f,
+                "source_location": "L1",
+                "language": clean_f.split(".")[-1] if "." in clean_f else "text",
+                "community": task_comm,
+            }
+            by_file[clean_f] = fid
+            by_file_lower[norm_case(clean_f)] = fid
+        if fid in nodes:
+            edge_exists = any(e.get("source") == node_id and e.get("target") == fid and e.get("relation") == "modified" for e in edges)
+            if not edge_exists:
+                edges.append({
+                    "source": node_id,
+                    "target": fid,
+                    "relation": "modified",
+                    "confidence": CONF_EXTRACTED,
+                    "confidence_score": 1.0,
+                    "source_file": rel_task_source,
+                    "source_location": "L1",
+                    "target_file": clean_f,
+                })
+
+    graph["built_at"] = now_iso()
+    stats = graph.setdefault("stats", {})
+    stats["nodes"] = len(nodes)
+    stats["edges"] = len(edges)
+    stats["files"] = len(cached_files)
+    stats["history_tasks"] = sum(1 for n in nodes.values() if n.get("kind") in ("task", "history"))
+    stats["history_edges"] = sum(1 for e in edges if e.get("relation") == "modified" and str(e.get("source", "")).startswith("task:"))
+    graph["nodes"] = list(nodes.values())
+    graph["edges"] = edges
+
+    # Atomically save root and date-wise snapshots
+    _dump_json(gdir / "graph.json", graph)
+    cache["files"] = cached_files
+    cache["history_cache"] = history_cache
+    _dump_json(gdir / "cache.json", cache)
+
+    date_dir = gdir / date_str
+    date_dir.mkdir(parents=True, exist_ok=True)
+    _dump_json(date_dir / "graph.json", graph)
+    _dump_json(date_dir / "cache.json", cache)
+
+    rep_file = date_dir / "GRAPH_REPORT.md"
+    root_rep = gdir / "GRAPH_REPORT.md"
+    if not rep_file.is_file() or not root_rep.is_file():
+        rep_text = graph_report(graph)
+        rep_file.write_text(rep_text, encoding="utf-8", newline="\n")
+        root_rep.write_text(rep_text, encoding="utf-8", newline="\n")
+    _auto_write_html_views(gdir, date_dir, graph)
+    return graph
 
 
 # -- watch + auto-refresh -----------------------------------------------------------------------

@@ -1,7 +1,7 @@
 ---
 name: veratum
 description: Memory-driven, evidence-backed engineering skill. Use for ANY code change - loads project memory, answers codebase questions from a code graph, locks a scoped contract with blast-radius analysis, checkpoints risky edits, validates with compacted logs, and blocks "done" until a cryptographic tree-hash gate passes.
-version: 1.2.0
+version: 1.3.0
 author: Mandeep Yadav
 license: MIT
 ---

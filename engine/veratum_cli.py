@@ -44,7 +44,7 @@ import time
 import uuid
 from pathlib import Path
 
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 BRAND = "Veratum"
 HOMEPAGE = "https://github.com/yadavmandeep/Veratum"
 VERATUM_DIRNAME = ".veratum"
@@ -60,16 +60,56 @@ IGNORE_DIRS = {
     "venv", ".venv", "env", ".env", ".idea", ".gradle", "vendor", "Pods",
 }
 
-JS_EXTS = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts", ".vue", ".svelte")
+JS_EXTS = (".js", ".mjs", ".cjs", ".jsx", ".vue", ".svelte")
+TS_EXTS = (".ts", ".mts", ".cts")
+TSX_EXTS = (".tsx",)
 PLSQL_EXTS = (".sql", ".spc", ".bdy", ".trg", ".pdc", ".prc", ".fnc", ".pks", ".pkb")
+C_EXTS = (".c", ".h")
+CPP_EXTS = (".cc", ".cpp", ".cxx", ".hpp", ".hh", ".hxx")
+CS_EXTS = (".cs",)
+RUBY_EXTS = (".rb", ".rake")
+PHP_EXTS = (".php", ".phtml")
+BASH_EXTS = (".sh", ".bash", ".zsh")
+LUA_EXTS = (".lua",)
+SCALA_EXTS = (".scala", ".sc")
+KOTLIN_EXTS = (".kt", ".kts")
+SWIFT_EXTS = (".swift",)
+ELIXIR_EXTS = (".ex", ".exs")
+GROOVY_EXTS = (".groovy", ".gvy", ".gradle")
+JULIA_EXTS = (".jl",)
+POWERSHELL_EXTS = (".ps1", ".psm1", ".psd1")
+OBJC_EXTS = (".m", ".mm")
+ZIG_EXTS = (".zig",)
+JSON_EXTS = (".json",)
+
 LANG_BY_EXT = {
     **{ext: "js" for ext in JS_EXTS},
+    **{ext: "ts" for ext in TS_EXTS},
+    **{ext: "tsx" for ext in TSX_EXTS},
     **{ext: "sql" for ext in PLSQL_EXTS},
-    ".groovy": "java",
+    **{ext: "c" for ext in C_EXTS},
+    **{ext: "cpp" for ext in CPP_EXTS},
+    **{ext: "c_sharp" for ext in CS_EXTS},
+    **{ext: "ruby" for ext in RUBY_EXTS},
+    **{ext: "php" for ext in PHP_EXTS},
+    **{ext: "bash" for ext in BASH_EXTS},
+    **{ext: "lua" for ext in LUA_EXTS},
+    **{ext: "scala" for ext in SCALA_EXTS},
+    **{ext: "kotlin" for ext in KOTLIN_EXTS},
+    **{ext: "swift" for ext in SWIFT_EXTS},
+    **{ext: "elixir" for ext in ELIXIR_EXTS},
+    **{ext: "groovy" for ext in GROOVY_EXTS},
+    **{ext: "julia" for ext in JULIA_EXTS},
+    **{ext: "powershell" for ext in POWERSHELL_EXTS},
+    **{ext: "objc" for ext in OBJC_EXTS},
+    **{ext: "zig" for ext in ZIG_EXTS},
+    **{ext: "json" for ext in JSON_EXTS},
+    ".py": "py", ".pyi": "py",
+    ".go": "go",
+    ".rs": "rs",
+    ".java": "java",
     ".jsp": "js",
     ".tag": "js",
-    ".py": "py", ".go": "go", ".rs": "rs", ".java": "java", ".kt": "java",
-    ".c": "c", ".h": "c", ".cc": "c", ".cpp": "c", ".hpp": "c", ".hh": "c",
 }
 
 DEFAULT_CONFIG = {
@@ -624,36 +664,67 @@ def brain_remember(ws: Workspace, text: str, kind: str = "insight", files=None) 
 # Background Auto-Update Checker
 # ---------------------------------------------------------------------------
 
-UPDATE_CHECK_INTERVAL_SEC = 86400  # check at most once every 24 hours
+UPDATE_CHECK_INTERVAL_SEC = 86400  # check at most once every 24 hours on success
+UPDATE_FAILURE_BACKOFF_SEC = 21600  # 6 hours backoff on network failure / offline / rate limit
+
+
+def _detect_update_command(ws: Workspace) -> str:
+    """Determine recommended update command based on execution environment."""
+    if (ws.root / "package.json").is_file():
+        try:
+            pkg = read_json(ws.root / "package.json", {}) or {}
+            deps = dict(pkg.get("dependencies", {}))
+            deps.update(pkg.get("devDependencies", {}))
+            if "veratum" in deps:
+                return "npm update veratum"
+        except Exception:
+            pass
+    if (ws.root / ".git").is_dir() and (ws.root / "bin" / "veratum.js").is_file():
+        return "git pull && npm run build"
+    return "npx veratum init"
 
 
 def check_auto_update(ws: Workspace, force: bool = False, fetcher=None) -> dict:
-    """Check GitHub release for a newer Veratum version. Cached in .veratum/state.json. Returns update status dict."""
+    """Check GitHub release for a newer Veratum version with 100% silent offline fallback and failure backoff."""
     state = ws.state()
     update_info = state.get("update_check") or {}
     now = time.time()
     last_check = update_info.get("checked_at_ts") or 0
-    if not force and (now - last_check) < UPDATE_CHECK_INTERVAL_SEC:
+    last_success = update_info.get("last_success", True)
+    interval = UPDATE_CHECK_INTERVAL_SEC if last_success else UPDATE_FAILURE_BACKOFF_SEC
+
+    if not force and (now - last_check) < interval:
         return update_info
 
     latest_tag = None
+    fetch_success = False
+    error_reason = None
     if fetcher:
-        latest_tag = fetcher()
+        try:
+            latest_tag = fetcher()
+            fetch_success = bool(latest_tag)
+        except BaseException as e:
+            error_reason = str(e)
+            latest_tag = None
     else:
         try:
+            import urllib.error
             import urllib.request
             req = urllib.request.Request(
                 "https://api.github.com/repos/yadavmandeep/Veratum/releases/latest",
                 headers={"User-Agent": "Veratum-Engine/{}".format(VERSION), "Accept": "application/vnd.github.v3+json"}
             )
-            with urllib.request.urlopen(req, timeout=1.5) as resp:
+            with urllib.request.urlopen(req, timeout=1.0) as resp:
                 if resp.status == 200:
                     data = json.loads(resp.read().decode("utf-8"))
                     latest_tag = data.get("tag_name")
-        except Exception:
+                    fetch_success = True
+        except BaseException as e:
+            error_reason = type(e).__name__
             latest_tag = None
 
-    if latest_tag:
+    update_cmd = _detect_update_command(ws)
+    if fetch_success and latest_tag:
         clean_latest = latest_tag.lstrip("v").strip()
         has_update = _version_tuple(clean_latest) > _version_tuple(VERSION)
         update_info = {
@@ -662,14 +733,21 @@ def check_auto_update(ws: Workspace, force: bool = False, fetcher=None) -> dict:
             "current_version": VERSION,
             "latest_version": clean_latest,
             "update_available": has_update,
+            "last_success": True,
+            "update_command": update_cmd,
         }
     else:
+        prev_latest = update_info.get("latest_version") or VERSION
+        prev_avail = update_info.get("update_available", False)
         update_info = {
             "checked_at_ts": now,
             "checked_at": now_iso(),
             "current_version": VERSION,
-            "latest_version": update_info.get("latest_version") or VERSION,
-            "update_available": update_info.get("update_available", False),
+            "latest_version": prev_latest,
+            "update_available": prev_avail,
+            "last_success": False,
+            "last_error": error_reason or "offline",
+            "update_command": update_cmd,
         }
     state["update_check"] = update_info
     ws.save_state(state)
@@ -691,8 +769,9 @@ def brain_context(ws: Workspace, max_insights: int = 12) -> str:
     # Version & auto-update notice
     update_info = ws.state().get("update_check") or {}
     if update_info.get("update_available"):
-        lines.append("✨ [VERATUM UPDATE AVAILABLE] v{} → v{} (Run `npx github:yadavmandeep/Veratum update` or auto-updates next build)".format(
-            VERSION, update_info.get("latest_version")))
+        cmd = update_info.get("update_command") or _detect_update_command(ws)
+        lines.append("✨ [VERATUM UPDATE AVAILABLE] v{} → v{} (Run `{}`)".format(
+            VERSION, update_info.get("latest_version"), cmd))
     cmds = brain.get("commands") or {}
     if cmds:
         lines.append("Commands: " + " | ".join("{}=`{}`".format(k, v) for k, v in sorted(cmds.items())))
@@ -771,10 +850,11 @@ CONF_INFERRED = "INFERRED"
 def _strip_js_ext(path: str) -> str:
     if path.endswith(".d.ts"):
         return path[:-5]
-    for ext in JS_EXTS:
+    for ext in JS_EXTS + TS_EXTS + TSX_EXTS:
         if path.endswith(ext):
             return path[: -len(ext)]
     return path
+
 
 
 def _py_module(rel: str) -> list:
@@ -838,7 +918,7 @@ class CodeIndex:
         text = _read_text(self.root / rel)
         lang = self.lang(rel)
         data: dict = {"lang": lang}
-        if lang == "js":
+        if lang in ("js", "ts", "tsx"):
             data["specs"] = _JS_IMPORT_RE.findall(text)
         elif lang == "py":
             stmts = []
@@ -987,11 +1067,15 @@ class CodeIndex:
         if importer == target:
             return False
         tlang, ilang = self.lang(target), self.lang(importer)
-        if not tlang or tlang != ilang:
+        if not tlang or not ilang:
+            return False
+        js_group = {"js", "ts", "tsx"}
+        if tlang in js_group and ilang in js_group:
+            data = self.parsed(importer)
+            return any(self._match_js(target, importer, s) for s in data.get("specs", []))
+        if tlang != ilang:
             return False
         data = self.parsed(importer)
-        if tlang == "js":
-            return any(self._match_js(target, importer, s) for s in data.get("specs", []))
         if tlang == "py":
             return self._match_py(target, importer, data.get("stmts", []))
         if tlang == "go":
@@ -1024,9 +1108,10 @@ class CodeIndex:
         lang = self.lang(rel)
         text = _read_text(self.root / rel)
         found = []
-        for pat in self._SYMBOL_PATTERNS.get(lang, []):
+        pats = self._SYMBOL_PATTERNS.get(lang) or (self._SYMBOL_PATTERNS.get("js") if lang in ("ts", "tsx") else [])
+        for pat in pats:
             found.extend(re.findall(pat, text, re.M))
-        if lang == "js":
+        if lang in ("js", "ts", "tsx"):
             for block in re.findall(r"export\s*\{([^}]*)\}", text):
                 for part in block.split(","):
                     name = part.strip().split(" as ")[-1].strip()
@@ -1075,7 +1160,7 @@ class CodeIndex:
         data = self.parsed(importer)
         found: list = []
         confidence = CONF_EXTRACTED
-        if lang == "js":
+        if lang in ("js", "ts", "tsx"):
             for m in _JS_IMPORT_RE.finditer(text):
                 if self._match_js(target, importer, m.group(1)):
                     found.append(self._line_no(text, m.start()))
@@ -2557,7 +2642,10 @@ def close_contract(ws: Workspace, result: dict) -> None:
             "status": "COMPLETED",
         }
         gm.record_task_history(ws, task_data)
-        gm.graph_build(ws)
+        if hasattr(gm, "graph_update_task"):
+            gm.graph_update_task(ws, task_data, files_changed=result.get("changed", []))
+        else:
+            gm.graph_build(ws)
     except Exception:
         pass
 

@@ -113,24 +113,35 @@ Verified by:     `pnpm test -- list` → EXIT 0 (4.2s)
 Tree hash:       sha256:9c41e0a7… (matches verified state)
 ```
 
-### Codebase graph (on by default, nothing to set up)
+### 🌐 Codebase & Multi-Format Knowledge Graph (Graphify-Grade)
 
-Veratum builds a map of your code (files, functions, classes, docs, PDFs) the first time a session starts and keeps it fresh after every change. Your agent asks it instead of grepping, so it reads less and finds the right files faster. You don't have to run anything. If you want to look yourself, type this in your agent's chat:
+Veratum builds a queryable knowledge graph of your entire workspace on session start and keeps it fresh after every file edit. It is not limited to source code—it indexes **code, documents, papers, images, and media assets** with an honest audit trail:
+- **Languages (24+)**: Python, TypeScript, JavaScript, Go, Rust, Java, C/C++, C#, Ruby, PHP, Bash, Kotlin, Swift, Elixir, Groovy, PL/SQL, JSP, etc.
+- **Documents & Prose**: Markdown (`.md`, `.mdx`), RST (`.rst`), Text (`.txt`), YAML (`.yaml`, `.yml`), HTML (`.html`), Quarto (`.qmd`), Org, AsciiDoc, LaTeX (`.tex`).
+- **Visual Assets & Media**: PNG, JPG, JPEG, GIF, WEBP, SVG, PDF, DOCX, XLSX, PPTX, MP4, MOV, WEBM, MP3, WAV.
+- **Automatic Graph Linkages**:
+  - Headings (`# Heading` or `<h1>...</h1>`) extract as navigable section nodes.
+  - Image and media embeds (`![alt](path)` or `<img src="path">`) create direct **`embeds` [EXTRACTED]** edges to asset nodes.
+  - Relative links create **`references` [EXTRACTED]** edges.
+  - Symbol backticks (`` `myFunction()` ``) link prose directly to code definitions.
+- **Queryable Graph**: Your agent queries the graph before grep/globbing, reading only the relevant symbols and call paths instead of searching through thousands of files.
+
+Type this directly in your agent's chat:
 
 ```text
-/veratum graph query where is login handled?
+/veratum graph query where is checkout handled?
 ```
 
-`init` adds one command to your editor, `/veratum`, and every use has the same shape: `/veratum <area> <action>`. Nobody has to type file paths:
+`init` adds one command to your editor, `/veratum`, with a unified CLI interface:
 
 | Type this | What happens |
 |---|---|
-| `/veratum graph build` | maps this project's code now (an existing project works too; it also builds by itself at session start) |
-| `/veratum graph query <question>` | answers from the code graph, with file and line (a plain `/veratum <question>` works too) |
-| `/veratum graph report` · `/veratum graph export` | summary of the biggest and most connected code · picture, Obsidian vault, Neo4j script |
-| `/veratum impact src/auth.ts` | what could break if you change that file |
-| `/veratum status` · `/veratum gate` · `/veratum doctor` | current task and evidence · the completion check · health check |
-| `/veratum config graph_auto off` | turn the automatic graph off (`/veratum config` lists the settings) |
+| `/veratum graph build` | Maps code, docs, images & assets now (auto-refreshes incrementally in <50ms) |
+| `/veratum graph query <question>` | Answers from knowledge graph with file and line evidence |
+| `/veratum graph report` · `/veratum graph export` | Summary of god nodes & communities · Interactive HTML map, SVG, Obsidian vault & Cypher script |
+| `/veratum impact <file>` | Blast-radius analysis: dependents, symbols, and risk score before editing |
+| `/veratum status` · `/veratum gate` · `/veratum doctor` | Contract state & ledger evidence · Completion gate validation · 11-point health check |
+| `/veratum config graph_auto off` | Toggle auto-graph build (use `/veratum config` to list all options) |
 
 They work in Claude Code, Cursor, Copilot, OpenCode, Windsurf and Antigravity (Cline: just write "Use Veratum: where is login handled?"). From a plain terminal the same thing is:
 

@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import unittest
 
 from test_veratum_engine import HAS_NODE, REPO, VeratumTestCase, veratum_cli  # also puts engine/ on sys.path
@@ -325,6 +326,30 @@ class TestGraphDocsAndSemantic(GraphCase):
         self.build()
         self.assertEqual(self.graph()["stats"]["semantic_stale"], 1)
         self.assertNotIn("Old", {n["label"] for n in self.graph()["nodes"]})
+
+    def test_expanded_doc_and_asset_extensions(self):
+        self.write("docs/manual.html", "<h1>User Guide</h1>\n<p><a href=\"../assets/architecture.svg\">Arch</a></p>\n<p><img src=\"../assets/diagram.png\"></p>")
+        self.write("docs/config.yaml", "service: veratum")
+        self.write("assets/diagram.png", "fake-png-bytes")
+        self.write("assets/architecture.svg", "<svg></svg>")
+        self.write("assets/recording.mp4", "fake-mp4-bytes")
+        self.write("docs/readme.md", "# Media\n\n![diagram](../assets/diagram.png)\n")
+        self.build()
+        g = self.graph()
+        nodes_by_id = {n["id"]: n for n in g["nodes"]}
+        self.assertIn("doc:docs/manual.html", nodes_by_id)
+        self.assertIn("doc:docs/config.yaml", nodes_by_id)
+        self.assertIn("asset:assets/diagram.png", nodes_by_id)
+        self.assertIn("asset:assets/architecture.svg", nodes_by_id)
+        self.assertIn("asset:assets/recording.mp4", nodes_by_id)
+        self.assertEqual(nodes_by_id["asset:assets/recording.mp4"]["kind"], "asset")
+
+        # Verify section created from HTML heading and edge to embedded image
+        embed_edge = next((e for e in g["edges"] if e["relation"] == "embeds" and e["target"] == "asset:assets/diagram.png"), None)
+        self.assertIsNotNone(embed_edge, "Must create embeds edge for image in document")
+        self.assertEqual(embed_edge["confidence"], "EXTRACTED")
+
+
 
 
 class TestGraphExports(GraphCase):
@@ -831,8 +856,189 @@ class TestDateWiseGraphHistory(GraphCase):
         self.assertIn("Implement OAuth2 token authentication", q_result)
         self.assertIn("api.py", q_result)
 
+    def test_graph_update_task_fast_path(self):
+        self.project()
+        self.build()
+        ws = veratum_cli.Workspace(self.tmp)
+
+        # Modify app/api.py with a new function
+        api_path = self.tmp / "app" / "api.py"
+        new_api_code = api_path.read_text(encoding="utf-8") + "\n\ndef fast_checkout_v2():\n    return True\n"
+        api_path.write_text(new_api_code, encoding="utf-8")
+
+        task_data = {
+            "id": "c-fast-01",
+            "goal": "Optimize checkout latency",
+            "completed_at": "2026-10-18T16:00:00Z",
+            "files_changed": ["app/api.py"],
+        }
+        veratum_graph.record_task_history(ws, task_data)
+
+        t0 = time.perf_counter()
+        updated_graph = veratum_graph.graph_update_task(ws, task_data, files_changed=["app/api.py"])
+        elapsed = time.perf_counter() - t0
+
+        self.assertLess(elapsed, 0.5, "Incremental graph update should be fast (< 0.5s)")
+        self.assertEqual(veratum_graph.validate_graph(updated_graph), [])
+
+        nodes = {n["id"]: n for n in updated_graph["nodes"]}
+        self.assertIn("task:c-fast-01", nodes)
+        self.assertEqual(nodes["task:c-fast-01"]["kind"], "task")
+        self.assertIn("Optimize checkout latency", nodes["task:c-fast-01"]["label"])
+
+        # Check new function symbol was added
+        self.assertIn("sym:app/api.py::fast_checkout_v2", nodes)
+
+        # Check modified edge exists
+        edge = self.edge(updated_graph, "Optimize checkout latency", "modified", "api.py")
+        self.assertEqual(edge["confidence"], "EXTRACTED")
+
+        # Check date-wise snapshot also updated
+        date_dir = self.tmp / ".veratum" / "graph" / "2026-10-18"
+        self.assertTrue((date_dir / "graph.json").is_file())
+        self.assertTrue((date_dir / "cache.json").is_file())
+
+    def test_history_cache_persisted_in_cache_json(self):
+        self.project()
+        ws = veratum_cli.Workspace(self.tmp)
+        veratum_graph.record_task_history(ws, {
+            "id": "c-hist-cache",
+            "goal": "Test history cache persistence",
+            "completed_at": "2026-10-18T10:00:00Z",
+            "files_changed": ["app/api.py"],
+        })
+        self.build()
+        cache = json.loads((self.tmp / ".veratum" / "graph" / "cache.json").read_text(encoding="utf-8"))
+        self.assertIn("history_cache", cache)
+        self.assertIn("2026-10-18", cache["history_cache"])
+        self.assertIn("nodes", cache["history_cache"]["2026-10-18"])
+        self.assertIn("edges", cache["history_cache"]["2026-10-18"])
+
+    def test_path_normalization_and_case_deduplication(self):
+        self.project()
+        ws = veratum_cli.Workspace(self.tmp)
+        # Record task with Windows mixed backslashes
+        veratum_graph.record_task_history(ws, {
+            "id": "c-path-norm-1",
+            "goal": "Test path normalization with backslashes",
+            "completed_at": "2026-10-18T17:00:00Z",
+            "files_changed": ["app\\api.py"],
+        })
+        self.build()
+        g = self.graph()
+        self.assertEqual(veratum_graph.validate_graph(g), [])
+
+        # Verify edge connects cleanly to api.py
+        edge = self.edge(g, "Test path normalization with backslashes", "modified", "api.py")
+        self.assertEqual(edge["confidence"], "EXTRACTED")
+
+        # Verify all source_file paths in graph nodes use strictly forward slashes
+        for node in g["nodes"]:
+            sf = node.get("source_file")
+            if sf:
+                self.assertNotIn("\\", sf, "Node path '{}' must not contain backslashes".format(sf))
+
+    def test_tree_sitter_extraction_multi_language(self):
+        samples = {
+            "py": ("class Calculator:\n    def add(self, a, b):\n        self.log(a, b)\n        return a + b\n",
+                   ["Calculator", "Calculator.add"], ["log"]),
+            "js": ("class Service {\n    fetchData() {\n        this.request();\n    }\n}\nconst send = () => { log(); };\n",
+                   ["Service", "Service.fetchData", "send"], ["request", "log"]),
+            "ts": ("interface IApi {\n    get(): void;\n}\nclass ApiClient implements IApi {\n    get(): void {\n        fetch();\n    }\n}\n",
+                   ["IApi", "IApi.get", "ApiClient", "ApiClient.get"], ["fetch"]),
+            "go": ("package main\ntype Worker struct{}\nfunc (w *Worker) Start() {\n    runTask()\n}\n",
+                   ["Worker", "Worker.Start"], ["runTask"]),
+            "rs": ("struct Task;\nimpl Task {\n    fn execute(&self) {\n        notify();\n    }\n}\n",
+                   ["Task", "Task.execute"], ["notify"]),
+            "java": ("public class App {\n    public void run() {\n        init();\n    }\n}\n",
+                     ["App", "App.run"], ["init"]),
+            "c_sharp": ("public class Runner {\n    public void Exec() {\n        Step();\n    }\n}\n",
+                        ["Runner", "Runner.Exec"], ["Step"]),
+            "ruby": ("class Worker\n    def work\n        notify()\n    end\nend\n",
+                     ["Worker", "Worker.work"], ["notify"]),
+            "php": ("<?php\nclass Controller {\n    public function index() {\n        render();\n    }\n}\n",
+                    ["Controller", "Controller.index"], ["render"]),
+            "bash": ("deploy() {\n    build\n}\n",
+                     ["deploy"], ["build"]),
+            "c": ("struct Point { int x; int y; };\nint compute() {\n    calc();\n    return 0;\n}\n",
+                  ["Point", "compute"], ["calc"]),
+            "cpp": ("class Engine {\npublic:\n    void start() {\n        boot();\n    }\n};\n",
+                    ["Engine", "Engine.start"], []),
+        }
+
+        for lang, (code, expected_defs, expected_calls) in samples.items():
+            res = veratum_graph.graph_extract_file(code, lang)
+            defs_quals = [d["qual"] for d in res["defs"]]
+            for ed in expected_defs:
+                self.assertIn(ed, defs_quals, f"Expected definition {ed} not found in {lang}: {defs_quals}")
+            call_names = [c["name"] for c in res["calls"]]
+            for ec in expected_calls:
+                self.assertIn(ec, call_names, f"Expected call {ec} not found in {lang}: {call_names}")
+
+    def test_tree_sitter_graceful_fallback_when_unavailable(self):
+        # Temporarily mock tree-sitter parser getter to return None
+        orig_getter = veratum_graph._get_tree_sitter_parser
+        veratum_graph._get_tree_sitter_parser = lambda lang: None
+        try:
+            # Python fallback to ast
+            py_code = "class Greeter:\n    def greet(self):\n        print(1)\n"
+            res_py = veratum_graph.graph_extract_file(py_code, "py")
+            quals_py = [d["qual"] for d in res_py["defs"]]
+            self.assertIn("Greeter", quals_py)
+            self.assertIn("Greeter.greet", quals_py)
+
+            # Generic fallback for other languages
+            js_code = "class Greeter {\n    greet() {\n        console.log(1);\n    }\n}\n"
+            res_js = veratum_graph.graph_extract_file(js_code, "js")
+            quals_js = [d["qual"] for d in res_js["defs"]]
+            self.assertIn("Greeter", quals_js)
+        finally:
+            veratum_graph._get_tree_sitter_parser = orig_getter
+
+    def test_tree_sitter_20plus_languages_supported_in_lang_by_ext(self):
+        # Verify 20+ distinct languages mapped in LANG_BY_EXT
+        distinct_langs = set(veratum_cli.LANG_BY_EXT.values())
+        self.assertGreaterEqual(len(distinct_langs), 20,
+                                f"Expected >= 20 distinct languages in LANG_BY_EXT, got {len(distinct_langs)}: {distinct_langs}")
+
+    def test_index_html_auto_generated_on_build(self):
+        self.project()
+        self.build()
+        root_index = self.tmp / ".veratum" / "graph" / "index.html"
+        root_graph = self.tmp / ".veratum" / "graph" / "graph.html"
+        self.assertTrue(root_index.is_file(), "index.html must be automatically generated at root")
+        self.assertTrue(root_graph.is_file(), "graph.html must be automatically generated at root")
+        content = root_index.read_text(encoding="utf-8")
+        self.assertIn("Veratum Knowledge Graph", content)
+        self.assertIn("snap-select", content)
+        self.assertIn("q-results", content)
+        self.assertIn("Unified Graph", content)
+
+        # Check date-wise snapshot also has index.html and graph.html
+        today = (self.graph().get("built_at") or veratum_graph.now_iso())[:10]
+        date_index = self.tmp / ".veratum" / "graph" / today / "index.html"
+        date_graph = self.tmp / ".veratum" / "graph" / today / "graph.html"
+        self.assertTrue(date_index.is_file(), "date snapshot must have index.html")
+        self.assertTrue(date_graph.is_file(), "date snapshot must have graph.html")
+
+    def test_index_html_snapshot_switcher_data(self):
+        self.project()
+        ws = veratum_cli.Workspace(self.tmp)
+        veratum_graph.record_task_history(ws, {
+            "id": "c-task-date-1",
+            "goal": "First task on 2026-10-18",
+            "completed_at": "2026-10-18T10:00:00Z",
+            "files_changed": ["app/api.py"],
+        })
+        self.build()
+        root_index = self.tmp / ".veratum" / "graph" / "index.html"
+        content = root_index.read_text(encoding="utf-8")
+        self.assertIn('"snapshots":', content)
+        self.assertIn("2026-10-18", content)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
 

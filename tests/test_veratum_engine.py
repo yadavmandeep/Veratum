@@ -971,9 +971,45 @@ class TestHooks(VeratumTestCase):
         res = veratum_cli.check_auto_update(ws, force=True, fetcher=lambda: "v2.0.0")
         self.assertTrue(res["update_available"])
         self.assertEqual(res["latest_version"], "2.0.0")
+        self.assertTrue(res["last_success"])
+        self.assertIn("update_command", res)
         ctx = veratum_cli.brain_context(ws)
         self.assertIn("[VERATUM UPDATE AVAILABLE]", ctx)
         self.assertIn("v2.0.0", ctx)
+        self.assertIn(res["update_command"], ctx)
+
+        # Test simulated offline failure: must not raise and must apply 6h backoff
+        fail_calls = [0]
+        def failing_fetcher():
+            fail_calls[0] += 1
+            raise OSError("No route to host")
+
+        fail_res = veratum_cli.check_auto_update(ws, force=True, fetcher=failing_fetcher)
+        self.assertFalse(fail_res["last_success"])
+        self.assertEqual(fail_calls[0], 1)
+        # Previous version remains preserved
+        self.assertEqual(fail_res["latest_version"], "2.0.0")
+        self.assertTrue(fail_res["update_available"])
+
+        # Second call within 6 hours must return cached failure without calling fetcher again
+        cached_res = veratum_cli.check_auto_update(ws, force=False, fetcher=failing_fetcher)
+        self.assertEqual(fail_calls[0], 1, "Must not retry when within failure backoff window")
+        self.assertFalse(cached_res["last_success"])
+
+    def test_engine_and_skills_in_sync(self):
+        """Pre-commit sync assertion: skills/veratum/scripts/ must match engine/ byte-for-byte."""
+        engine_dir = REPO / "engine"
+        skills_dir = REPO / "skills" / "veratum" / "scripts"
+        self.assertTrue(engine_dir.is_dir(), "engine/ must exist")
+        self.assertTrue(skills_dir.is_dir(), "skills/veratum/scripts/ must exist")
+        for src in engine_dir.iterdir():
+            if src.is_file() and src.suffix == ".py":
+                skill_file = skills_dir / src.name
+                self.assertTrue(skill_file.is_file(), "Missing mirrored file {}".format(skill_file))
+                src_text = src.read_text(encoding="utf-8").replace("\r\n", "\n")
+                skill_text = skill_file.read_text(encoding="utf-8").replace("\r\n", "\n")
+                self.assertEqual(src_text, skill_text,
+                                 "skills/veratum/scripts/{} is out of sync with engine/{}. Run `npm run build`.".format(src.name, src.name))
 
     def test_hooks_are_inert_without_veratum(self):
         code, out, err = self.hook("pre-tool", {"hook_event_name": "PreToolUse", "tool_name": "Write",
