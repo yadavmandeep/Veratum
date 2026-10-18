@@ -595,26 +595,29 @@ async function init(opts) {
   }
   log.push("ready    .veratum/brain.json (project memory)");
 
-  // Automatically build the knowledge graph during init
-  const graphRes = runEngine(target, py, ["graph", "build"], { capture: true });
-  if (graphRes.status === 0) {
-    log.push("ready    .veratum/graph/ (code & asset knowledge graph mapped)");
-  }
-
   const skill = readSkill();
   for (const ide of ides) {
     for (const n of IDES[ide].install(target, py, skill, log)) notes.push(`${IDE_LABELS[ide]}: ${n}`);
     installCommand(ide, target, py, log);
   }
   installGitignore(target, log);
+
+  for (const line of log.filter((l) => !l.startsWith("ok "))) console.log(`  ${c.green("✓")} ${line}`);
+  console.log("");
+
+  // Automatically build the knowledge graph with live progress
+  console.log(c.bold("  🕸️  Mapping codebase knowledge graph..."));
+  const graphRes = runEngine(target, py, ["graph", "build"], { capture: false });
+  if (graphRes.status === 0) {
+    console.log(`  ${c.green("✓")} ready    .veratum/graph/ (code & asset knowledge graph mapped)`);
+  } else {
+    console.log(c.dim("  (Knowledge graph can be built later via: veratum graph build)"));
+  }
   updateConfig(target, (cfg) => {
     cfg.installed_adapters = Array.from(new Set([...(cfg.installed_adapters || []), ...ides]));
     cfg.python = py.shell;
     cfg.installed_version = PKG.version;
   });
-
-  for (const line of log.filter((l) => !l.startsWith("ok "))) console.log(`  ${c.green("✓")} ${line}`);
-  console.log("");
   if (notes.length) {
     console.log(c.bold("  Last step:"));
     for (const n of notes) console.log(`  ${c.yellow("→")} ${n}`);

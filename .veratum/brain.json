@@ -2,7 +2,7 @@
   "schema": "veratum.brain/v1",
   "project": "veratum",
   "created_at": "2026-10-17T19:38:03Z",
-  "updated_at": "2026-10-18T19:51:28Z",
+  "updated_at": "2026-10-18T20:01:33Z",
   "stack": [
     "node",
     "python"
@@ -50,8 +50,8 @@
       "last_pass": "2026-10-18T13:15:18Z"
     },
     "npm run check": {
-      "passes": 7,
-      "last_pass": "2026-10-18T19:51:25Z"
+      "passes": 9,
+      "last_pass": "2026-10-18T20:01:29Z"
     }
   },
   "modules": {
@@ -674,12 +674,35 @@
       "verify": "npm run check",
       "tree_hash": "4321bf65dc97afc49cbbdecd4167ffe4eeffe6c096aa59ba8811e0b359ac8157",
       "completed_at": "2026-10-18T19:51:28Z"
+    },
+    {
+      "contract_id": "c-20261019-012904-4f44",
+      "goal": "Stream real-time terminal progress during init and graph build so user sees live file count and steps instead of feeling stuck",
+      "files_changed": [
+        "bin/veratum.js",
+        "engine/veratum_graph.py",
+        "skills/veratum/scripts/veratum_graph.py"
+      ],
+      "verify": "npm run check",
+      "tree_hash": "da8ba7128be274b0efaf74ec1010cd10a6baf2f61dda4a12de4c0e9f0157a69c",
+      "completed_at": "2026-10-18T20:00:23Z"
+    },
+    {
+      "contract_id": "c-20261019-013033-8fd2",
+      "goal": "Add percentage and animated progress indicators to graph build terminal stream",
+      "files_changed": [
+        "engine/veratum_graph.py",
+        "skills/veratum/scripts/veratum_graph.py"
+      ],
+      "verify": "npm run check",
+      "tree_hash": "77ddea020d574ee4ddc740a59766de925274d10c6b17ead4e6ef46c864e2e2c7",
+      "completed_at": "2026-10-18T20:01:33Z"
     }
   ],
   "stats": {
-    "verify_runs": 43,
-    "verify_passes": 40,
-    "tasks_completed": 35,
+    "verify_runs": 45,
+    "verify_passes": 42,
+    "tasks_completed": 37,
     "log_lines_saved": 2892
   }
 }

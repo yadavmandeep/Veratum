@@ -450,9 +450,17 @@ def graph_build(ws: Workspace, full: bool = False, max_files: int = 0, max_file_
     extracted: dict = {}
     fresh = reused = skipped_large = 0
     total = len(index.files)
+    if progress and total > 0:
+        progress("   [0%] 🔍 Scanning {} source files across codebase...".format(total))
+    step = 250 if total > 2000 else 50 if total > 200 else 10 if total > 30 else 1
     for n, rel in enumerate(index.files, 1):
-        if progress and total > 5000 and n % 5000 == 0:
-            progress("   … {}/{} files".format(n, total))
+        if progress and (n % step == 0 or n == total):
+            pct = int((n / total) * 70)  # parsing is 0-70% of total graph work
+            bar_len = 20
+            filled = int(bar_len * (n / total))
+            bar = "█" * filled + "░" * (bar_len - filled)
+            progress("   [{:>2}%] |{}| {}/{} files ({} cached, {} extracted)".format(
+                pct, bar, n, total, reused, fresh))
         path = ws.root / rel
         try:
             st = path.stat()
@@ -495,6 +503,8 @@ def graph_build(ws: Workspace, full: bool = False, max_files: int = 0, max_file_
             edges.append({"source": fid, "target": sid, "relation": "contains", "confidence": CONF_EXTRACTED,
                           "confidence_score": 1.0, "source_file": rel, "source_location": "L{}".format(d["line"])})
 
+    if progress:
+        progress("   [75%] 🔗 Resolving imports and symbol call hierarchies...")
     # file -> file imports (EXTRACTED, with the import line as evidence); token prefilter avoids n^2 matching
     by_token: dict = {}
     for rel in extracted:
@@ -549,6 +559,8 @@ def graph_build(ws: Workspace, full: bool = False, max_files: int = 0, max_file_
                               "confidence_score": score, "basis": basis, "source_file": rel,
                               "source_location": "L{}".format(call["line"])})
 
+    if progress:
+        progress("   [85%] 🌐 Louvain community detection & semantic indexing...")
     doc_stats = _graph_add_docs(ws, index, nodes, edges, defs_by_name)
     doc_stats.update(_graph_merge_semantic(ws, nodes, edges))
     doc_stats.update(_graph_add_history(ws, nodes, edges, history_cache=history_cache))
@@ -562,6 +574,8 @@ def graph_build(ws: Workspace, full: bool = False, max_files: int = 0, max_file_
                        **doc_stats},
              "communities": communities["list"], "nodes": list(nodes.values()), "edges": edges}
     rep_text = graph_report(graph)
+    if progress:
+        progress("   [95%] 💾 Saving graph.json & generating HTML visualizers...")
     _dump_json(gdir / "graph.json", graph)
     _dump_json(gdir / "cache.json", {"schema": GRAPH_SCHEMA, "max_file_kb": max_file_kb, "files": extracted, "history_cache": history_cache})
     (gdir / "GRAPH_REPORT.md").write_text(rep_text, encoding="utf-8", newline="\n")
