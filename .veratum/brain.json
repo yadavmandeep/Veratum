@@ -1,0 +1,570 @@
+{
+  "schema": "veratum.brain/v1",
+  "project": "veratum",
+  "created_at": "2026-10-17T19:38:03Z",
+  "updated_at": "2026-10-18T13:15:21Z",
+  "stack": [
+    "node",
+    "python"
+  ],
+  "package_manager": "npm",
+  "commands": {
+    "test": "npm test",
+    "build": "npm run build"
+  },
+  "known_good_commands": {
+    "npm test": {
+      "passes": 15,
+      "last_pass": "2026-10-18T09:48:05Z"
+    },
+    "node bin/veratum.js build --check": {
+      "passes": 4,
+      "last_pass": "2026-10-18T10:37:11Z"
+    },
+    "python -m unittest discover -s tests -p test_veratum_graph.py": {
+      "passes": 1,
+      "last_pass": "2026-10-18T10:13:47Z"
+    },
+    "python -m unittest discover -s tests -p test_veratum_engine.py -k test_auto_update_checker": {
+      "passes": 1,
+      "last_pass": "2026-10-18T10:25:05Z"
+    },
+    "python -m unittest discover -s tests -p test_veratum_graph.py -k TestDateWiseGraphHistory": {
+      "passes": 1,
+      "last_pass": "2026-10-18T10:31:28Z"
+    },
+    "python -m unittest discover -s tests -p test_veratum_graph.py -k test_tree_sitter": {
+      "passes": 1,
+      "last_pass": "2026-10-18T10:53:11Z"
+    },
+    "python -m unittest discover -s tests -p test_veratum_graph.py -k test_index_html": {
+      "passes": 6,
+      "last_pass": "2026-10-18T11:35:07Z"
+    },
+    "python -m pytest tests -k test_expanded_doc_and_asset_extensions": {
+      "passes": 1,
+      "last_pass": "2026-10-18T13:04:22Z"
+    },
+    "python -m pytest tests/test_veratum_engine.py -k test_detects_python_go_rust_stacks -q": {
+      "passes": 2,
+      "last_pass": "2026-10-18T13:15:18Z"
+    }
+  },
+  "modules": {
+    "adapters": {
+      "files": 5,
+      "languages": {
+        "py": 4,
+        "js": 1
+      }
+    },
+    "benchmarks": {
+      "files": 63,
+      "languages": {
+        "py": 37,
+        "ts": 24,
+        "mjs": 2
+      }
+    },
+    "bin": {
+      "files": 1,
+      "languages": {
+        "js": 1
+      }
+    },
+    "engine": {
+      "files": 4,
+      "languages": {
+        "py": 4
+      }
+    },
+    "skills": {
+      "files": 4,
+      "languages": {
+        "py": 4
+      }
+    },
+    "tests": {
+      "files": 2,
+      "languages": {
+        "py": 2
+      }
+    }
+  },
+  "entrypoints": [],
+  "insights": [
+    {
+      "id": "m1",
+      "kind": "architecture",
+      "text": "Graph indexing now supports 5MB max file size by default (5120 KB), with extraction support for Groovy, PL/SQL (.sql, .spc, .bdy, .trg, .pdc, .prc, .fnc, .pks, .pkb), and JSP (.jsp, .tag)",
+      "files": [],
+      "created_at": "2026-10-17T21:05:13Z"
+    },
+    {
+      "id": "m2",
+      "kind": "architecture",
+      "text": "Completed tasks/queries automatically save into date-wise folders (.veratum/graph/history/YYYY-MM-DD/<id>.json) and rebuild into the knowledge graph with task nodes connected to modified files",
+      "files": [],
+      "created_at": "2026-10-18T09:11:23Z"
+    },
+    {
+      "id": "m3",
+      "kind": "architecture",
+      "text": "Date-wise graph snapshots and query history now strictly follow Graphify's layout (.veratum/graph/YYYY-MM-DD/ containing graph.json, GRAPH_REPORT.md, cache.json, and tasks.json)",
+      "files": [],
+      "created_at": "2026-10-18T09:27:58Z"
+    },
+    {
+      "id": "m4",
+      "kind": "architecture",
+      "text": "Session-start automatically runs check_auto_update in the background and displays available version notifications in brain_context and gate Evidence Block",
+      "files": [],
+      "created_at": "2026-10-18T09:44:23Z"
+    },
+    {
+      "id": "m5",
+      "kind": "architecture",
+      "text": "Automatic background update check runs on session-start, displays new version notices in brain_context and Evidence Block, and tracks update state in .veratum/state.json",
+      "files": [],
+      "created_at": "2026-10-18T09:48:20Z"
+    },
+    {
+      "id": "m6",
+      "kind": "architecture",
+      "text": "Implemented graph_update_task for sub-50ms incremental knowledge graph updates and mtime-based date-wise history caching in cache.json",
+      "files": [],
+      "created_at": "2026-10-18T10:14:19Z"
+    },
+    {
+      "id": "m7",
+      "kind": "architecture",
+      "text": "Update checker hardened with BaseException silent fallback, 6h failure backoff, and install-aware update commands",
+      "files": [],
+      "created_at": "2026-10-18T10:25:15Z"
+    },
+    {
+      "id": "m8",
+      "kind": "architecture",
+      "text": "Enforced strict POSIX normalization, Windows case-insensitive graph node deduplication, and automated engine-to-skills sync test",
+      "files": [],
+      "created_at": "2026-10-18T10:31:39Z"
+    },
+    {
+      "id": "m9",
+      "kind": "architecture",
+      "text": "Bumped Veratum version to v1.3.0 across all package manifests and synced skills",
+      "files": [],
+      "created_at": "2026-10-18T10:37:21Z"
+    },
+    {
+      "id": "m10",
+      "kind": "architecture",
+      "text": "Added compiler-grade Tree-sitter multi-language AST extraction supporting 24+ languages with qualified names, exact line numbers, call sites, and seamless fallback to Python ast and regex",
+      "files": [],
+      "created_at": "2026-10-18T10:53:22Z"
+    },
+    {
+      "id": "m11",
+      "kind": "architecture",
+      "text": "Graph build and task updates now auto-generate interactive Graphify-style index.html (and graph.html) at root and inside date-wise folders, featuring date snapshot switcher, real-time search autocomplete, and task history nodes",
+      "files": [],
+      "created_at": "2026-10-18T11:05:45Z"
+    },
+    {
+      "id": "m12",
+      "kind": "decision",
+      "text": "Streamlined visualizer UI to pure Graphify aesthetic: permanently focused dark cyber theme, eliminated extra theme/mode button clutter, kept snapshot switcher, search autocomplete, node info, and communities sidebar with Select All checkboxes.",
+      "files": [],
+      "created_at": "2026-10-18T11:31:12Z"
+    },
+    {
+      "id": "m13",
+      "kind": "decision",
+      "text": "Refined visualizer layout to full-bleed canvas with exact Graphify screenshot parity: integrated snapshot switcher into sidebar, removed top bar distractions, and perfected COMMUNITIES list alignment and colors.",
+      "files": [],
+      "created_at": "2026-10-18T11:35:22Z"
+    }
+  ],
+  "task_history": [
+    {
+      "contract_id": "c-20261018-011040-aebe",
+      "goal": "Keep graph output out of git: add graph/ to .veratum/.gitignore and installer block; restore .veratum/ in root .gitignore",
+      "files_changed": [
+        ".gitignore",
+        "bin/veratum.js",
+        "engine/veratum_cli.py",
+        "skills/veratum/scripts/veratum_cli.py",
+        "tests/test_veratum_graph.py"
+      ],
+      "verify": "npm test",
+      "tree_hash": "ead49d57bff095bce05b77f7514a15f5ca31432e90a08ab4578d3e81998996e7",
+      "completed_at": "2026-10-17T19:43:08Z"
+    },
+    {
+      "contract_id": "c-20261018-011441-59bd",
+      "goal": "Bump version 1.1.0 -> 1.2.0 (graph release) and add the word skill to the README tagline and SKILL description",
+      "files_changed": [
+        "CITATION.cff",
+        "README.md",
+        "adapters/antigravity/plugin.json",
+        "core/SKILL.template.md",
+        "engine/veratum_cli.py",
+        "package.json",
+        "pyproject.toml",
+        "skills/veratum/SKILL.md",
+        "skills/veratum/scripts/veratum_cli.py"
+      ],
+      "verify": "npm test",
+      "tree_hash": "3a563551351407ffdb356bb015b9c28a9007e07ca5f08577603c07240f0a76f5",
+      "completed_at": "2026-10-17T19:47:02Z"
+    },
+    {
+      "contract_id": "c-20261018-012028-f05d",
+      "goal": "Make install instructions work for GitHub users: replace npx veratum (npm name taken) with npx github:yadavmandeep/Veratum for install/update/uninstall, python .veratum/engine/veratum_cli.py for daily commands; drop wrong npm badge",
+      "files_changed": [
+        "README.md",
+        "adapters/cline/.clinerules",
+        "adapters/copilot/copilot-instructions.md",
+        "adapters/cursor/veratum.mdc",
+        "adapters/windsurf/.windsurfrules",
+        "bin/veratum.js",
+        "core/SKILL.template.md",
+        "docs/hosts.md",
+        "docs/install.md",
+        "docs/publishing.md",
+        "docs/quickstart.md",
+        "docs/troubleshooting.md",
+        "docs/usage.md",
+        "engine/veratum_cli.py",
+        "skills/veratum/SKILL.md",
+        "skills/veratum/scripts/veratum_cli.py",
+        "tests/test_veratum_engine.py",
+        "tests/test_veratum_graph.py"
+      ],
+      "verify": "npm test",
+      "tree_hash": "ce8b783975b4b23cb566cd46acb96e9c1ab132b4b65efeb5df86a5b6b4342100",
+      "completed_at": "2026-10-17T19:53:43Z"
+    },
+    {
+      "contract_id": "c-20261018-012557-8892",
+      "goal": "Add 'build' row to the /veratum slash command so existing projects can map their code",
+      "files_changed": [
+        "adapters/commands/veratum.md"
+      ],
+      "verify": "npm test",
+      "tree_hash": "fd8046c5a9cf442f6f5bce38f77777a9928a96323f97c088989986160a375f6d",
+      "completed_at": "2026-10-17T19:58:09Z"
+    },
+    {
+      "contract_id": "c-20261018-012917-d9ff",
+      "goal": "Add /graph slash command next to /veratum and print slash-command usage after init instead of .veratum file paths",
+      "files_changed": [
+        "README.md",
+        "adapters/commands/graph.md",
+        "bin/veratum.js",
+        "docs/hosts.md",
+        "docs/install.md",
+        "tests/test_veratum_engine.py"
+      ],
+      "verify": "npm test",
+      "tree_hash": "412925e48a3a6ffda530d1dedefe465c0e80cfe244db44cb0494d3390f29d476",
+      "completed_at": "2026-10-17T20:02:24Z"
+    },
+    {
+      "contract_id": "c-20261018-013251-6f4f",
+      "goal": "Rename slash commands so everything starts with veratum: /veratum (all), /veratum-graph, /veratum-graph-build; drop /graph",
+      "files_changed": [
+        "README.md",
+        "adapters/commands/graph.md",
+        "adapters/commands/veratum-graph-build.md",
+        "adapters/commands/veratum-graph.md",
+        "adapters/commands/veratum.md",
+        "bin/veratum.js",
+        "docs/hosts.md",
+        "docs/install.md",
+        "docs/usage.md",
+        "tests/test_veratum_engine.py"
+      ],
+      "verify": "npm test",
+      "tree_hash": "0c619ef3cfa063d902ebd3df5400381f2e73bafba2e0f2af93b1c41c62afa0f5",
+      "completed_at": "2026-10-17T20:05:41Z"
+    },
+    {
+      "contract_id": "c-20261018-013641-e3e1",
+      "goal": "One consistent slash command: /veratum <area> <action> (graph build|query|report|export|..., status, gate, impact, doctor, config); drop /veratum-graph and /veratum-graph-build",
+      "files_changed": [
+        "adapters/commands/veratum-graph-build.md",
+        "adapters/commands/veratum-graph.md",
+        "adapters/commands/veratum.md",
+        "bin/veratum.js",
+        "tests/test_veratum_engine.py"
+      ],
+      "verify": "npm test",
+      "tree_hash": "ccc0a31a28800671586f4632dfc24105a75d1962878e7d4dfda83312237bc080",
+      "completed_at": "2026-10-17T20:09:14Z"
+    },
+    {
+      "contract_id": "c-20261018-013921-2954",
+      "goal": "Docs: update README, hosts.md, install.md to the single /veratum <area> <action> command",
+      "files_changed": [
+        "README.md",
+        "docs/hosts.md"
+      ],
+      "verify": "node bin/veratum.js build --check",
+      "tree_hash": "e9e8af6155d657d5ecd4cd9fcd38f8cfb891d082e3616a27a67bb0d55150cee6",
+      "completed_at": "2026-10-17T20:09:35Z"
+    },
+    {
+      "contract_id": "c-20261018-013943-4dcb",
+      "goal": "Docs: install.md shortcut line uses the single /veratum command",
+      "files_changed": [
+        "docs/install.md"
+      ],
+      "verify": "node bin/veratum.js build --check",
+      "tree_hash": "872c6fb6aba2eaa665fb010e5c5369251c1a3d3b080504235dac2d5eb413d1d2",
+      "completed_at": "2026-10-17T20:09:57Z"
+    },
+    {
+      "contract_id": "c-20261018-014246-eac7",
+      "goal": "README: update the Full Setup section (graph, /veratum command, working install command)",
+      "files_changed": [
+        "README.md"
+      ],
+      "verify": "node bin/veratum.js build --check",
+      "tree_hash": "39e8fd249ffdc449507903f0bcc5e16c805c3237ffeb72c488cd5de87048cf90",
+      "completed_at": "2026-10-17T20:13:01Z"
+    },
+    {
+      "contract_id": "c-20261018-015105-65eb",
+      "goal": "Graph: no file limit by default (all files), skip huge files, lower memory, progress output; rebuild graph.html as an interactive viewer (zoom, drag, search, filters, details panel)",
+      "files_changed": [
+        "README.md",
+        "adapters/commands/veratum.md",
+        "docs/usage.md",
+        "engine/veratum_cli.py",
+        "engine/veratum_export.py",
+        "engine/veratum_graph.py",
+        "skills/veratum/scripts/veratum_cli.py",
+        "skills/veratum/scripts/veratum_export.py",
+        "skills/veratum/scripts/veratum_graph.py",
+        "tests/test_veratum_graph.py"
+      ],
+      "verify": "npm test",
+      "tree_hash": "1e1503666b74a96535bda6460c803fc7c0c70307599b3fc25721e617010d2f2f",
+      "completed_at": "2026-10-17T20:30:29Z"
+    },
+    {
+      "contract_id": "c-20261018-020135-b818",
+      "goal": "Rebuild graph.html/graph.svg as a clean file-level map: aggregated links, community bubbles, always-visible labels, symbol/link details in a side panel",
+      "files_changed": [
+        "README.md",
+        "engine/veratum_export.py",
+        "skills/veratum/scripts/veratum_export.py",
+        "tests/test_veratum_graph.py"
+      ],
+      "verify": "npm test",
+      "tree_hash": "24ebec64e7c6f4f323f47f2973da9141f12c2054665b58d01466d3e0b7ead27b",
+      "completed_at": "2026-10-17T20:39:50Z"
+    },
+    {
+      "contract_id": "c-20261018-022200-906c",
+      "goal": "Support 5MB max file size default and add support for Groovy, PL/SQL, and JSP in graph indexing",
+      "files_changed": [
+        "engine/veratum_cli.py",
+        "engine/veratum_graph.py",
+        "skills/veratum/scripts/veratum_cli.py",
+        "skills/veratum/scripts/veratum_graph.py",
+        "tests/test_veratum_graph.py"
+      ],
+      "verify": "npm test",
+      "tree_hash": "cafa5aca0bce110d70fc4d2844897d79c8cb92ccf56910124a1856f7ed958f70",
+      "completed_at": "2026-10-17T21:05:08Z"
+    },
+    {
+      "contract_id": "c-20261018-143210-ace0",
+      "goal": "Record completed tasks/queries in date-wise history folders (.veratum/graph/history/YYYY-MM-DD/) and automatically update them as connected nodes into the knowledge graph with auto-refresh",
+      "files_changed": [
+        "engine/veratum_cli.py",
+        "engine/veratum_graph.py",
+        "skills/veratum/scripts/veratum_cli.py",
+        "skills/veratum/scripts/veratum_graph.py",
+        "tests/test_veratum_graph.py"
+      ],
+      "verify": "npm test",
+      "tree_hash": "93a26c766eba406c58e373b389be9b9c5d1f54bcb163ee0588c95c8ad1da01a1",
+      "completed_at": "2026-10-18T09:10:53Z"
+    },
+    {
+      "contract_id": "c-20261018-145154-f6f0",
+      "goal": "Store date-wise graph snapshots and query tasks directly in YYYY-MM-DD folders matching Graphify layout while preserving Veratum task metadata",
+      "files_changed": [
+        "engine/veratum_graph.py",
+        "skills/veratum/scripts/veratum_graph.py",
+        "tests/test_veratum_graph.py"
+      ],
+      "verify": "npm test",
+      "tree_hash": "a9cc021d3781d39dcda0d7e9cf67aed94aadf62ad3b168a9060305c5e264b078",
+      "completed_at": "2026-10-18T09:27:30Z"
+    },
+    {
+      "contract_id": "c-20261018-150806-2b6c",
+      "goal": "Add automatic background update checker on session-start with version notification in brain context and engine sync",
+      "files_changed": [
+        "engine/veratum_cli.py",
+        "skills/veratum/scripts/veratum_cli.py",
+        "tests/test_veratum_engine.py"
+      ],
+      "verify": "npm test",
+      "tree_hash": "25c8cfb68309c6a9fc8170ceea1ab675082478882ec4c786642496d0f7109736",
+      "completed_at": "2026-10-18T09:44:17Z"
+    },
+    {
+      "contract_id": "c-20261018-151437-21af",
+      "goal": "Restore return item in brain_remember",
+      "files_changed": [
+        "engine/veratum_cli.py",
+        "skills/veratum/scripts/veratum_cli.py"
+      ],
+      "verify": "npm test",
+      "tree_hash": "25ffd01b27b8418230c0557d7ff8bc85c0299bda5f182ae35bea9591378ede6e",
+      "completed_at": "2026-10-18T09:48:13Z"
+    },
+    {
+      "contract_id": "c-20261018-153722-04cc",
+      "goal": "Implement sub-50ms incremental graph updates and date-wise history caching for task completion",
+      "files_changed": [
+        "engine/veratum_cli.py",
+        "engine/veratum_graph.py",
+        "skills/veratum/scripts/veratum_cli.py",
+        "skills/veratum/scripts/veratum_graph.py",
+        "tests/test_veratum_graph.py"
+      ],
+      "verify": "python -m unittest discover -s tests -p test_veratum_graph.py",
+      "tree_hash": "a2c6e757dcfbb962bf63b2363ae1f2977daf803e9e66e610dcf0c51c1ee464f7",
+      "completed_at": "2026-10-18T10:13:52Z"
+    },
+    {
+      "contract_id": "c-20261018-155341-3020",
+      "goal": "Harden update checker with 100% silent offline fallback, 6h failure backoff, and install-aware update hints",
+      "files_changed": [
+        "engine/veratum_cli.py",
+        "skills/veratum/scripts/veratum_cli.py",
+        "tests/test_veratum_engine.py"
+      ],
+      "verify": "python -m unittest discover -s tests -p test_veratum_engine.py -k test_auto_update_checker",
+      "tree_hash": "5084d072b04cd52ded4454cc616c9324010fd6dd853ebea9d02464925a78d26d",
+      "completed_at": "2026-10-18T10:25:10Z"
+    },
+    {
+      "contract_id": "c-20261018-155630-750b",
+      "goal": "Implement POSIX path normalization with Windows case-insensitive deduplication and engine-to-skills sync assertion test",
+      "files_changed": [
+        "engine/veratum_graph.py",
+        "skills/veratum/scripts/veratum_graph.py",
+        "tests/test_veratum_engine.py",
+        "tests/test_veratum_graph.py"
+      ],
+      "verify": "python -m unittest discover -s tests -p test_veratum_graph.py -k TestDateWiseGraphHistory",
+      "tree_hash": "294d4eb7414743a4aa5836aaba79bb27c2e7e82709179479abc48e7c39c1d450",
+      "completed_at": "2026-10-18T10:31:34Z"
+    },
+    {
+      "contract_id": "c-20261018-160549-38fe",
+      "goal": "Bump release version from 1.2.0 to 1.3.0 for production readiness",
+      "files_changed": [
+        "CITATION.cff",
+        "adapters/antigravity/plugin.json",
+        "core/SKILL.template.md",
+        "engine/veratum_cli.py",
+        "package.json",
+        "pyproject.toml",
+        "skills/veratum/SKILL.md",
+        "skills/veratum/scripts/veratum_cli.py"
+      ],
+      "verify": "node bin/veratum.js build --check",
+      "tree_hash": "5fb0429cc9b18a619f9c54b27d65c88bde9d8d17062987589991b8a4684775b6",
+      "completed_at": "2026-10-18T10:37:16Z"
+    },
+    {
+      "contract_id": "c-20261018-161417-d370",
+      "goal": "Implement Tree-sitter multi-language AST extractor with 20+ language support and graceful fallback",
+      "files_changed": [
+        "engine/veratum_cli.py",
+        "engine/veratum_graph.py",
+        "skills/veratum/scripts/veratum_cli.py",
+        "skills/veratum/scripts/veratum_graph.py",
+        "tests/test_veratum_graph.py"
+      ],
+      "verify": "python -m unittest discover -s tests -p test_veratum_graph.py -k test_tree_sitter",
+      "tree_hash": "9ffdb021b593f4d6c17346a80198ba91f5af55d6acfefe72fb113db1ad19ab38",
+      "completed_at": "2026-10-18T10:53:16Z"
+    },
+    {
+      "contract_id": "c-20261018-162705-0cc4",
+      "goal": "Auto-generate interactive index.html graph visualization matching Graphify with date-wise switcher on graph build",
+      "files_changed": [
+        "engine/veratum_export.py",
+        "engine/veratum_graph.py",
+        "skills/veratum/scripts/veratum_export.py",
+        "skills/veratum/scripts/veratum_graph.py",
+        "tests/test_veratum_graph.py"
+      ],
+      "verify": "python -m unittest discover -s tests -p test_veratum_graph.py -k test_index_html",
+      "tree_hash": "18d39522dcdb937c189a36e87fac7961825b2f9986f10ee2c59b76a016beeeae",
+      "completed_at": "2026-10-18T11:05:39Z"
+    },
+    {
+      "contract_id": "c-20261018-165904-4109",
+      "goal": "Simplify visualizer UI: remove theme button and extra header clutter, streamline to clean Graphify aesthetic with pure dark theme, search, node info, communities sidebar with Select All checkboxes, and date-wise snapshot switcher",
+      "files_changed": [
+        "engine/veratum_export.py",
+        "skills/veratum/scripts/veratum_export.py"
+      ],
+      "verify": "python -m unittest discover -s tests -p test_veratum_graph.py -k test_index_html",
+      "tree_hash": "50c73da450254d08e64444827daf3916283303d55431aba6e8b8a34d19d46ac5",
+      "completed_at": "2026-10-18T11:31:05Z"
+    },
+    {
+      "contract_id": "c-20261018-170255-401f",
+      "goal": "Refine visualizer to exact Graphify layout: full-bleed canvas, exact COMMUNITIES sidebar styling with checkboxes and counts matching screenshot, integrated date snapshot switcher, and node inspector",
+      "files_changed": [
+        "engine/veratum_export.py",
+        "skills/veratum/scripts/veratum_export.py"
+      ],
+      "verify": "python -m unittest discover -s tests -p test_veratum_graph.py -k test_index_html",
+      "tree_hash": "c51c373bf1fd91ba35395f545f973813d00fc8e6eedfe6533e616c4abef3f901",
+      "completed_at": "2026-10-18T11:35:14Z"
+    },
+    {
+      "contract_id": "c-20261018-184033-c051",
+      "goal": "Refine documentation and README to premium, clean, high-impact Graphify/Gravitas aesthetic",
+      "files_changed": [
+        "README.md",
+        "docs/concepts.md",
+        "docs/quickstart.md",
+        "docs/usage.md"
+      ],
+      "verify": "python -m pytest tests/test_veratum_engine.py -k test_detects_python_go_rust_stacks -q",
+      "tree_hash": "d110f9454e026d22f861d5e4b678a2e0483f100b20a93598e3fa180a14214c8f",
+      "completed_at": "2026-10-18T13:12:35Z"
+    },
+    {
+      "contract_id": "c-20261018-184427-59c1",
+      "goal": "Add multi-language README translations (zh, ja) and top-bar language switcher",
+      "files_changed": [
+        "README.md",
+        "README_ja.md",
+        "README_zh.md"
+      ],
+      "verify": "python -m pytest tests/test_veratum_engine.py -k test_detects_python_go_rust_stacks -q",
+      "tree_hash": "a4026b4aea49cf589cedb09df69035f5ed76407a29d7e415dc8138804a8ab6cb",
+      "completed_at": "2026-10-18T13:15:21Z"
+    }
+  ],
+  "stats": {
+    "verify_runs": 35,
+    "verify_passes": 32,
+    "tasks_completed": 27,
+    "log_lines_saved": 2892
+  }
+}

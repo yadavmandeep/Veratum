@@ -22,6 +22,16 @@
             "timeout": 20
           }
         ]
+      },
+      {
+        "matcher": "Glob|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.veratum/engine/veratum_cli.py\" hook pre-tool --host claude",
+            "timeout": 20
+          }
+        ]
       }
     ],
     "PostToolUse": [

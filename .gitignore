@@ -72,6 +72,13 @@ benchmarks/logs/
 .claude/skills/
 
 # >>> veratum (managed)
-.veratum/
+.veratum/logs/
+.veratum/ledger.json
+.veratum/contract.json
+.veratum/baseline.json
+.veratum/state.json
+.veratum/snapshots/
+.veratum/cache/
+.veratum/graph/
 # <<< veratum
 
