@@ -4,7 +4,7 @@ Use the shell. `V` below means `python3 .veratum/engine/veratum_cli.py`. Every r
 
 | Request | Run |
 |---|---|
-| `graph build` | `V graph build`, then `V graph report` and give a 5-line summary (size, biggest areas, most connected code, anything AMBIGUOUS worth a look). If it says the file limit was reached, re-run with `--max-files 20000` |
+| `graph build` | `V graph build`, then `V graph report` and give a 5-line summary (size, biggest areas, most connected code, anything AMBIGUOUS worth a look). It takes every file; on a big repo it can take a few minutes and prints progress |
 | `graph query <question>` | `V graph query "<question>"` |
 | `graph report` | `V graph report`, then give a 5-line summary |
 | `graph export` | `V graph export`, then say where the files are (`.veratum/graph/export/`: `graph.html`, `graph.svg`, `obsidian/`, `graph.cypher`) |

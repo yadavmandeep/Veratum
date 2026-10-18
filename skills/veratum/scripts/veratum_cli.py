@@ -61,8 +61,13 @@ IGNORE_DIRS = {
 }
 
 JS_EXTS = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts", ".vue", ".svelte")
+PLSQL_EXTS = (".sql", ".spc", ".bdy", ".trg", ".pdc", ".prc", ".fnc", ".pks", ".pkb")
 LANG_BY_EXT = {
     **{ext: "js" for ext in JS_EXTS},
+    **{ext: "sql" for ext in PLSQL_EXTS},
+    ".groovy": "java",
+    ".jsp": "js",
+    ".tag": "js",
     ".py": "py", ".go": "go", ".rs": "rs", ".java": "java", ".kt": "java",
     ".c": "c", ".h": "c", ".cc": "c", ".cpp": "c", ".hpp": "c", ".hh": "c",
 }
@@ -615,11 +620,79 @@ def brain_remember(ws: Workspace, text: str, kind: str = "insight", files=None) 
     return item
 
 
+# ---------------------------------------------------------------------------
+# Background Auto-Update Checker
+# ---------------------------------------------------------------------------
+
+UPDATE_CHECK_INTERVAL_SEC = 86400  # check at most once every 24 hours
+
+
+def check_auto_update(ws: Workspace, force: bool = False, fetcher=None) -> dict:
+    """Check GitHub release for a newer Veratum version. Cached in .veratum/state.json. Returns update status dict."""
+    state = ws.state()
+    update_info = state.get("update_check") or {}
+    now = time.time()
+    last_check = update_info.get("checked_at_ts") or 0
+    if not force and (now - last_check) < UPDATE_CHECK_INTERVAL_SEC:
+        return update_info
+
+    latest_tag = None
+    if fetcher:
+        latest_tag = fetcher()
+    else:
+        try:
+            import urllib.request
+            req = urllib.request.Request(
+                "https://api.github.com/repos/yadavmandeep/Veratum/releases/latest",
+                headers={"User-Agent": "Veratum-Engine/{}".format(VERSION), "Accept": "application/vnd.github.v3+json"}
+            )
+            with urllib.request.urlopen(req, timeout=1.5) as resp:
+                if resp.status == 200:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    latest_tag = data.get("tag_name")
+        except Exception:
+            latest_tag = None
+
+    if latest_tag:
+        clean_latest = latest_tag.lstrip("v").strip()
+        has_update = _version_tuple(clean_latest) > _version_tuple(VERSION)
+        update_info = {
+            "checked_at_ts": now,
+            "checked_at": now_iso(),
+            "current_version": VERSION,
+            "latest_version": clean_latest,
+            "update_available": has_update,
+        }
+    else:
+        update_info = {
+            "checked_at_ts": now,
+            "checked_at": now_iso(),
+            "current_version": VERSION,
+            "latest_version": update_info.get("latest_version") or VERSION,
+            "update_available": update_info.get("update_available", False),
+        }
+    state["update_check"] = update_info
+    ws.save_state(state)
+    return update_info
+
+
+def _version_tuple(v: str) -> tuple:
+    try:
+        return tuple(int(x) for x in re.findall(r"\d+", str(v)))
+    except Exception:
+        return (0,)
+
+
 def brain_context(ws: Workspace, max_insights: int = 12) -> str:
     """Compact brain summary for session-start injection (token-efficient)."""
     brain = ws.brain()
     lines = ["[VERATUM BRAIN] project={} | stack={}".format(
         brain.get("project"), ", ".join(brain.get("stack") or []) or "unknown")]
+    # Version & auto-update notice
+    update_info = ws.state().get("update_check") or {}
+    if update_info.get("update_available"):
+        lines.append("✨ [VERATUM UPDATE AVAILABLE] v{} → v{} (Run `npx github:yadavmandeep/Veratum update` or auto-updates next build)".format(
+            VERSION, update_info.get("latest_version")))
     cmds = brain.get("commands") or {}
     if cmds:
         lines.append("Commands: " + " | ".join("{}=`{}`".format(k, v) for k, v in sorted(cmds.items())))
@@ -727,7 +800,7 @@ def _rs_module(rel: str) -> list:
 class CodeIndex:
     """Lazy import index over the workspace's source files."""
 
-    def __init__(self, ws: Workspace, max_files: int = 25000):
+    def __init__(self, ws: Workspace, max_files: int | None = 25000):
         self.ws = ws
         self.root = ws.root
         self.files = self._list_files(max_files)
@@ -738,7 +811,7 @@ class CodeIndex:
         if m:
             self._go_module = m.group(1)
 
-    def _list_files(self, max_files: int, exts=None) -> list:
+    def _list_files(self, max_files: int | None, exts=None) -> list:
         exts = exts or LANG_BY_EXT
         files = []
         if is_git_repo(self.root):
@@ -754,7 +827,7 @@ class CodeIndex:
                     if os.path.splitext(name)[1].lower() in exts:
                         files.append(to_posix(os.path.relpath(os.path.join(dirpath, name), str(self.root))))
         files = sorted(set(files))
-        return files[:max_files]
+        return files[:max_files] if max_files else files  # None / 0 = every file
 
     def lang(self, rel: str) -> str | None:
         return LANG_BY_EXT.get(os.path.splitext(rel)[1].lower())
@@ -2469,6 +2542,24 @@ def close_contract(ws: Workspace, result: dict) -> None:
     state["stop_blocks"] = 0
     ws.save_state(state)
     _append_history(ws, {"event": "gate_passed", "contract_id": contract.get("id"), "tree_hash": result["current_hash"]})
+    try:
+        gm = _graph_module()
+        task_data = {
+            "id": contract.get("id"),
+            "contract_id": contract.get("id"),
+            "goal": contract.get("goal"),
+            "query": contract.get("goal"),
+            "completed_at": contract["completed_at"],
+            "files_changed": result["changed"],
+            "files": result["changed"] or contract.get("files", []),
+            "verify": ledger.get("command"),
+            "tree_hash": result["current_hash"],
+            "status": "COMPLETED",
+        }
+        gm.record_task_history(ws, task_data)
+        gm.graph_build(ws)
+    except Exception:
+        pass
 
 
 def render_gate(result: dict) -> str:
@@ -2496,6 +2587,7 @@ def render_gate(result: dict) -> str:
     lines = [
         "✅ [VERATUM COMPLETION GATE PASSED]",
         "━━━━━━━━━━━━━━━━ VERATUM EVIDENCE BLOCK ━━━━━━━━━━━━━━━━",
+        "Engine:          Veratum v{}".format(VERSION),
         "Goal:            {}".format(c.get("goal")),
         "Contract:        {}".format(c.get("id")),
         "Changed ({}):     {}".format(len(changed), ", ".join(changed[:15]) + (" …" if len(changed) > 15 else "") if changed else "(no file changes)"),
@@ -2532,7 +2624,7 @@ def checkpoint_create(ws: Workspace, label: str = "") -> dict:
         else:
             os.unlink(tmp_index)
         env = {"GIT_INDEX_FILE": tmp_index}
-        git(root, ["add", "-A", "--", ".", ":(exclude).veratum"], env=env)
+        git(root, ["add", "-A"], env=env)
         tree = git(root, ["write-tree"], env=env).strip()
     finally:
         if os.path.exists(tmp_index):
@@ -2896,6 +2988,10 @@ def run_hook(event: str, host: str, fallback_root: Path, raw: str) -> int:
                 _graph_module().graph_auto_refresh(ws)
             except VeratumError:
                 pass
+            try:
+                check_auto_update(ws)
+            except Exception:
+                pass
             print(brain_context(ws))
             return 0
         if event == "read":
@@ -3149,18 +3245,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("graph", help="Knowledge graph: build/query/path/explain/report/benchmark/status")
     s.add_argument("action", choices=["build", "query", "path", "explain", "report", "benchmark", "status",
-                                      "export", "watch", "semantic"])
+                                      "export", "watch", "semantic", "history"])
     s.add_argument("text", nargs="*", help="question (query/benchmark), two node names (path), node name (explain), "
                                            "list|add [file.json] (semantic)")
     s.add_argument("--format", choices=["html", "svg", "obsidian", "cypher", "all"], default="all", help="export format")
     s.add_argument("--out", help="export directory inside the workspace (default .veratum/graph/export)")
-    s.add_argument("--max-nodes", type=int, default=200, help="export: most-connected nodes to draw")
+    s.add_argument("--max-nodes", type=int, default=400, help="export: most-connected nodes to draw (html/svg)")
     s.add_argument("--interval", type=float, default=2.0, help="watch: seconds between checks")
     s.add_argument("--debounce", type=float, default=3.0, help="watch: quiet seconds before rebuilding")
     s.add_argument("--cycles", type=int, help="watch: stop after N checks (default: run until Ctrl-C)")
     s.add_argument("--data", help="semantic add: JSON text instead of a file")
     s.add_argument("--full", action="store_true", help="build: ignore the per-file cache")
-    s.add_argument("--max-files", type=int, default=5000)
+    s.add_argument("--max-files", type=int, default=0, help="build: stop after N files (default 0 = every file)")
+    s.add_argument("--max-file-kb", type=int, default=5120, help="build: skip source files larger than this (generated/minified code); 0 = no limit")
     s.add_argument("--mode", choices=["bfs", "dfs"], default="bfs")
     s.add_argument("--depth", type=int, default=2)
     s.add_argument("--budget", type=int, default=2000, help="query: approximate token budget")

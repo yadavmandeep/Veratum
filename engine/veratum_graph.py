@@ -8,11 +8,14 @@ VeratumError type whether the CLI runs as a script or is imported.
 """
 from __future__ import annotations
 
+import bisect
 import json
 import os
 import posixpath
 import re
+import sys
 import time
+import uuid
 from pathlib import Path
 
 # Helpers owned by veratum_cli.py, injected by bind().
@@ -51,6 +54,11 @@ _GRAPH_DEF_PATTERNS = {
     "java": [(r"^\s*(?:public\s+|private\s+|protected\s+|static\s+|final\s+|abstract\s+|sealed\s+)*(?:class|interface|enum|record)\s+(\w+)", "class"),
              (r"^\s*(?:public|private|protected)\s+(?:static\s+|final\s+|synchronized\s+|abstract\s+)*[\w<>\[\],.?]+\s+(\w+)\s*\(", "method")],
     "c": [(r"^[A-Za-z_][\w \t\*]*?\b([A-Za-z_]\w*)\s*\([^;{]*\)\s*\{", "function")],
+    "sql": [
+        (r"(?i)^\s*(?:create\s+(?:or\s+replace\s+)?package(?:\s+body)?)\s+(\w+)", "class"),
+        (r"(?i)^\s*(?:create\s+(?:or\s+replace\s+)?(?:procedure|function)|procedure|function)\s+(\w+)", "function"),
+        (r"(?i)^\s*(?:create\s+(?:or\s+replace\s+)?trigger)\s+(\w+)", "function"),
+    ],
 }
 _GRAPH_CALL_RE = re.compile(r"(?<![\w$.])([A-Za-z_$][\w$]*)\s*\(|\.([A-Za-z_$][\w$]*)\s*\(")
 
@@ -105,15 +113,14 @@ def _extract_generic(text: str, lang: str) -> dict:
     for a, b in zip(defs, defs[1:]):
         a["end"] = max(a["line"], b["line"] - 1)
     def_lines = {d["line"]: d for d in defs}
+    starts = [d["line"] for d in defs]
     calls: list = []
     for i, line in enumerate(lines, 1):
         stripped = line.strip()
         if i in def_lines or not stripped or stripped.startswith(("//", "#", "*", "/*") + _IMPORT_LINE_PREFIXES):
             continue
-        owner = ""
-        for d in defs:
-            if d["line"] <= i <= d["end"]:
-                owner = d["qual"]
+        k = bisect.bisect_right(starts, i) - 1  # the definition whose range holds this line
+        owner = defs[k]["qual"] if k >= 0 and i <= defs[k]["end"] else ""
         for m in _GRAPH_CALL_RE.finditer(line):
             name = m.group(1) or m.group(2)
             if name and name not in _GRAPH_KEYWORDS:
@@ -124,8 +131,16 @@ def _extract_generic(text: str, lang: str) -> dict:
 
 
 def graph_extract_file(text: str, lang: str) -> dict:
-    result = _extract_python_ast(text) if lang == "py" else None
-    return result or _extract_generic(text, lang)
+    result = (_extract_python_ast(text) if lang == "py" else None) or _extract_generic(text, lang)
+    seen: set = set()  # one call per (name, caller) is enough for the graph and keeps cache.json small
+    unique = []
+    for call in result["calls"]:
+        key = (call["name"], call["owner"])
+        if key not in seen:
+            seen.add(key)
+            unique.append(call)
+    result["calls"] = unique
+    return result
 
 
 def _import_tokens(data: dict) -> set:
@@ -138,32 +153,53 @@ def _import_tokens(data: dict) -> set:
     return {t.lower() for r in raw for t in re.split(r"[/.:\\\-@~#*{}\s,]+", str(r)) if t}
 
 
-def graph_build(ws: Workspace, full: bool = False, max_files: int = 5000) -> dict:
-    """Build/refresh .veratum/graph/. Per-file extraction is cached by content hash (incremental)."""
+def _dump_json(path: Path, data) -> None:
+    """Compact, streamed JSON (no indent, no giant intermediate string): the graph can have millions of edges."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
+        json.dump(data, fh, ensure_ascii=False, separators=(",", ":"))
+    os.replace(tmp, path)
+
+
+def graph_build(ws: Workspace, full: bool = False, max_files: int = 0, max_file_kb: int = 5120, progress=None) -> dict:
+    """Build/refresh .veratum/graph/. Per-file extraction is cached by content hash (incremental).
+    max_files=0 means every file; max_file_kb skips huge (generated/minified) sources, 0 = no size limit."""
     gdir = ws.dir / "graph"
-    index = CodeIndex(ws, max_files=max_files)
+    index = CodeIndex(ws, max_files=max_files or None)
     old = read_json(gdir / "cache.json", {}) or {}
     cache = {} if full or old.get("schema") != GRAPH_SCHEMA else old.get("files", {})
     extracted: dict = {}
-    fresh = reused = 0
-    for rel in index.files:
+    fresh = reused = skipped_large = 0
+    total = len(index.files)
+    for n, rel in enumerate(index.files, 1):
+        if progress and total > 5000 and n % 5000 == 0:
+            progress("   … {}/{} files".format(n, total))
         path = ws.root / rel
         try:
-            sha = _sha256_file(path)
+            st = path.stat()
+            if max_file_kb and st.st_size > max_file_kb * 1024:
+                skipped_large += 1
+                continue
+            hit = cache.get(rel)
+            if hit and hit.get("size") == st.st_size and hit.get("mtime") == st.st_mtime_ns:
+                sha = hit["sha"]  # same size and mtime: skip re-hashing (this is what keeps updates fast on huge repos)
+            else:
+                sha = _sha256_file(path)
         except OSError:
             continue
-        hit = cache.get(rel)
         if hit and hit.get("sha") == sha:
             data = hit["data"]
             reused += 1
         else:
             data = graph_extract_file(_read_text(path), index.lang(rel))
             fresh += 1
-        extracted[rel] = {"sha": sha, "data": data}
+        extracted[rel] = {"sha": sha, "size": st.st_size, "mtime": st.st_mtime_ns, "data": data}
 
     nodes: dict = {}
     edges: list = []
     defs_by_name: dict = {}
+    defs_by_nf: dict = {}  # (name, file) -> [(node id, file)] : constant-time same-file / imported-file lookups
     owner_id: dict = {}
     for rel, entry in extracted.items():
         fid = "file:" + rel
@@ -177,6 +213,7 @@ def graph_build(ws: Workspace, full: bool = False, max_files: int = 5000) -> dic
                           "source_location": "L{}".format(d["line"]), "language": index.lang(rel)}
             owner_id[(rel, d["qual"])] = sid
             defs_by_name.setdefault(d["name"], []).append((sid, rel))
+            defs_by_nf.setdefault((d["name"], rel), []).append((sid, rel))
             edges.append({"source": fid, "target": sid, "relation": "contains", "confidence": CONF_EXTRACTED,
                           "confidence_score": 1.0, "source_file": rel, "source_location": "L{}".format(d["line"])})
 
@@ -200,6 +237,8 @@ def graph_build(ws: Workspace, full: bool = False, max_files: int = 5000) -> dic
                               "confidence": conf, "confidence_score": 1.0 if conf == CONF_EXTRACTED else 0.7,
                               "source_file": rel, "source_location": "L{}".format(line)})
                 imported.setdefault(rel, set()).add(target)
+    index._parsed.clear()  # parsed import data is not needed any more: free it before the call pass
+    by_token.clear()
 
     # call edges: name-resolved, tiered confidence (never EXTRACTED: names are not types)
     seen_calls: set = set()
@@ -212,8 +251,8 @@ def graph_build(ws: Workspace, full: bool = False, max_files: int = 5000) -> dic
             caller = owner_id.get((rel, call["owner"])) if call["owner"] else None
             caller = caller or "file:" + rel
             common = len(name) < 5 or name.lower() in CodeIndex._COMMON_WORDS
-            same = [c for c in cands if c[1] == rel]
-            via_import = [c for c in cands if c[1] in imported.get(rel, ())]
+            same = defs_by_nf.get((name, rel), [])
+            via_import = [c for f in imported.get(rel, ()) for c in defs_by_nf.get((name, f), [])]
             if same:
                 chosen, conf, score, basis = same[:3], CONF_INFERRED, 0.8, "same-file"
             elif via_import:
@@ -234,17 +273,28 @@ def graph_build(ws: Workspace, full: bool = False, max_files: int = 5000) -> dic
 
     doc_stats = _graph_add_docs(ws, index, nodes, edges, defs_by_name)
     doc_stats.update(_graph_merge_semantic(ws, nodes, edges))
+    doc_stats.update(_graph_add_history(ws, nodes, edges))
     communities = _graph_cluster(nodes, edges)
     for nid, node in nodes.items():
         node["community"] = communities["of"].get(nid, -1)
     graph = {"schema": GRAPH_SCHEMA, "built_at": now_iso(),
              "stats": {"files": len(extracted), "nodes": len(nodes), "edges": len(edges),
-                       "extracted_now": fresh, "from_cache": reused, "truncated": len(index.files) >= max_files,
+                       "extracted_now": fresh, "from_cache": reused,
+                       "truncated": bool(max_files) and len(index.files) >= max_files, "skipped_large": skipped_large,
                        **doc_stats},
              "communities": communities["list"], "nodes": list(nodes.values()), "edges": edges}
-    write_json(gdir / "graph.json", graph)
-    write_json(gdir / "cache.json", {"schema": GRAPH_SCHEMA, "files": extracted})
-    (gdir / "GRAPH_REPORT.md").write_text(graph_report(graph), encoding="utf-8", newline="\n")
+    rep_text = graph_report(graph)
+    _dump_json(gdir / "graph.json", graph)
+    _dump_json(gdir / "cache.json", {"schema": GRAPH_SCHEMA, "max_file_kb": max_file_kb, "files": extracted})
+    (gdir / "GRAPH_REPORT.md").write_text(rep_text, encoding="utf-8", newline="\n")
+
+    # Date-wise snapshot folder (Graphify layout: .veratum/graph/YYYY-MM-DD/)
+    today = (graph.get("built_at") or now_iso())[:10]
+    date_dir = gdir / today
+    date_dir.mkdir(parents=True, exist_ok=True)
+    _dump_json(date_dir / "graph.json", graph)
+    _dump_json(date_dir / "cache.json", {"schema": GRAPH_SCHEMA, "max_file_kb": max_file_kb, "files": extracted})
+    (date_dir / "GRAPH_REPORT.md").write_text(rep_text, encoding="utf-8", newline="\n")
     return graph
 
 
@@ -567,12 +617,27 @@ def graph_benchmark(ws: Workspace, graph: dict, question: str) -> dict:
 
 
 def graph_status(ws: Workspace) -> dict:
-    cache = (read_json(ws.dir / "graph" / "cache.json", {}) or {}).get("files", {})
+    doc = read_json(ws.dir / "graph" / "cache.json", {}) or {}
+    cache, limit_kb = doc.get("files", {}), doc.get("max_file_kb", 5120)
     if not cache or not (ws.dir / "graph" / "graph.json").exists():
         return {"built": False, "stale_files": []}
-    files = CodeIndex(ws).files
-    stale = [f for f in files if f not in cache or cache[f].get("sha") != _sha256_file(ws.root / f)]
-    stale += [f for f in cache if f not in set(files)]
+    files = CodeIndex(ws, max_files=None).files
+    present = set(files)
+    stale = []
+    for f in files:
+        try:
+            st = (ws.root / f).stat()
+            if limit_kb and st.st_size > limit_kb * 1024:
+                continue  # skipped as too large when the graph was built
+            hit = cache.get(f)
+            if not hit:
+                stale.append(f)
+            elif hit.get("size") != st.st_size or hit.get("mtime") != st.st_mtime_ns:
+                if hit.get("sha") != _sha256_file(ws.root / f):  # touched but unchanged content is not stale
+                    stale.append(f)
+        except OSError:
+            stale.append(f)
+    stale += [f for f in cache if f not in present]
     return {"built": True, "stale_files": sorted(set(stale))}
 
 
@@ -588,7 +653,7 @@ def _graph_add_docs(ws: Workspace, index: "CodeIndex", nodes: dict, edges: list,
     """Markdown/text docs become nodes: headings (EXTRACTED), relative links (EXTRACTED), `code` mentions (INFERRED).
     Binary assets (PDF/images) become nodes the agent can enrich through `graph semantic add`."""
     from urllib.parse import unquote
-    files = index._list_files(500, exts=_DOC_EXTS + _ASSET_EXTS)
+    files = index._list_files(None, exts=_DOC_EXTS + _ASSET_EXTS)
     by_rel = {n["source_file"]: nid for nid, n in nodes.items() if n["kind"] == "file"}
     docs = assets = 0
     for rel in files:
@@ -643,7 +708,7 @@ def _semantic_path(ws: Workspace) -> Path:
 
 def graph_semantic_pending(ws: Workspace, files: list | None = None) -> list:
     """Docs/assets with no (or outdated) semantic extraction: [(rel, sha)]. The host agent reads each and submits notes."""
-    files = files if files is not None else CodeIndex(ws)._list_files(500, exts=_DOC_EXTS + _ASSET_EXTS)
+    files = files if files is not None else CodeIndex(ws, max_files=None)._list_files(None, exts=_DOC_EXTS + _ASSET_EXTS)
     done = (read_json(_semantic_path(ws), {}) or {}).get("files", {})
     out = []
     for rel in files:
@@ -733,13 +798,150 @@ def _graph_merge_semantic(ws: Workspace, nodes: dict, edges: list) -> dict:
     return {"semantic_files": merged, "semantic_stale": stale, "semantic_dropped_edges": dropped}
 
 
+# -- date-wise task & query history (Graphify-aligned) -----------------------------------
+def record_task_history(ws: Workspace, task_data: dict) -> Path:
+    """Store completed task/query in date-wise folder: .veratum/graph/<YYYY-MM-DD>/<id>.json and tasks.json."""
+    completed_at = task_data.get("completed_at") or now_iso()
+    date_str = str(completed_at)[:10]  # YYYY-MM-DD
+    target_dir = ws.dir / "graph" / date_str
+    target_dir.mkdir(parents=True, exist_ok=True)
+    tid = task_data.get("id") or task_data.get("contract_id") or ("task-" + uuid.uuid4().hex[:8])
+    clean_id = re.sub(r"[^\w\-.]", "_", str(tid))
+    target_path = target_dir / "{}.json".format(clean_id)
+    payload = dict(task_data)
+    payload.setdefault("id", tid)
+    payload.setdefault("date", date_str)
+    payload.setdefault("completed_at", completed_at)
+    write_json(target_path, payload)
+
+    # Maintain tasks.json in date folder (aggregate array of tasks/queries)
+    tasks_file = target_dir / "tasks.json"
+    tasks_list = read_json(tasks_file, []) or []
+    if not isinstance(tasks_list, list):
+        tasks_list = []
+    tasks_list = [t for t in tasks_list if isinstance(t, dict) and t.get("id") != tid] + [payload]
+    write_json(tasks_file, tasks_list)
+    return target_path
+
+
+def _graph_add_history(ws: Workspace, nodes: dict, edges: list) -> dict:
+    """Scan date-wise folders (.veratum/graph/<YYYY-MM-DD>/) and add all task nodes and edges."""
+    gdir = ws.dir / "graph"
+    if not gdir.is_dir():
+        return {"history_tasks": 0, "history_edges": 0}
+    by_file = {n["source_file"]: nid for nid, n in nodes.items() if n.get("kind") in ("file", "doc", "asset")}
+    tasks_count = edges_count = 0
+    date_dirs = []
+    date_re = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+    try:
+        for p in gdir.iterdir():
+            if p.is_dir():
+                if date_re.match(p.name):
+                    date_dirs.append(p)
+                elif p.name == "history":
+                    for sub in p.iterdir():
+                        if sub.is_dir() and date_re.match(sub.name):
+                            date_dirs.append(sub)
+    except OSError:
+        return {"history_tasks": 0, "history_edges": 0}
+
+    seen_tasks = set()
+    for date_entry in sorted(date_dirs, key=lambda d: d.name):
+        date_str = date_entry.name
+        try:
+            files_in_date = sorted(date_entry.iterdir())
+        except OSError:
+            continue
+        for child_file in files_in_date:
+            if not child_file.is_file():
+                continue
+            fname = child_file.name
+            # Skip snapshot files of the graph itself to avoid indexing full graph snapshot as a task
+            if fname in ("graph.json", "cache.json", "GRAPH_REPORT.md", ".graphify_labels.json", "manifest.json", "cost.json"):
+                continue
+            rel_path = ws.rel(str(child_file)) or str(child_file).replace("\\", "/")
+            if child_file.suffix.lower() == ".json":
+                try:
+                    data = read_json(child_file, None)
+                except Exception:
+                    continue
+                if not data:
+                    continue
+                items = data if isinstance(data, list) else [data]
+                for idx, item in enumerate(items):
+                    if not isinstance(item, dict):
+                        continue
+                    tid = item.get("id") or item.get("contract_id") or "{}_{}".format(child_file.stem, idx)
+                    if tid in seen_tasks:
+                        continue
+                    seen_tasks.add(tid)
+                    node_id = "task:" + str(tid)
+                    if node_id in nodes:
+                        continue
+                    goal = item.get("goal") or item.get("query") or item.get("title") or str(tid)
+                    completed_at = item.get("completed_at") or item.get("at") or date_str
+                    nodes[node_id] = {
+                        "id": node_id,
+                        "label": _graph_label(goal),
+                        "kind": "task",
+                        "source_file": rel_path,
+                        "source_location": "L1",
+                        "language": "task",
+                        "date": date_str,
+                        "completed_at": completed_at,
+                    }
+                    tasks_count += 1
+                    target_files = item.get("files_changed") or item.get("files") or item.get("touched") or []
+                    for f in target_files:
+                        if not isinstance(f, str) or not f.strip():
+                            continue
+                        clean_f = f.replace("\\", "/").strip()
+                        file_id = by_file.get(clean_f) or ("file:" + clean_f)
+                        if file_id not in nodes and (ws.root / clean_f).exists():
+                            nodes[file_id] = {
+                                "id": file_id,
+                                "label": posixpath.basename(clean_f),
+                                "kind": "file",
+                                "source_file": clean_f,
+                                "source_location": "L1",
+                                "language": clean_f.split(".")[-1] if "." in clean_f else "text",
+                            }
+                            by_file[clean_f] = file_id
+                        if file_id in nodes:
+                            edges.append({
+                                "source": node_id,
+                                "target": file_id,
+                                "relation": "modified",
+                                "confidence": CONF_EXTRACTED,
+                                "confidence_score": 1.0,
+                                "source_file": rel_path,
+                                "source_location": "L1",
+                            })
+                            edges_count += 1
+            else:
+                # Any other file inside the date folder (e.g. notes.txt): add as history node
+                node_id = "histfile:" + rel_path
+                if node_id not in nodes:
+                    nodes[node_id] = {
+                        "id": node_id,
+                        "label": child_file.name,
+                        "kind": "history",
+                        "source_file": rel_path,
+                        "source_location": "L1",
+                        "language": child_file.suffix.lstrip(".").lower() or "text",
+                        "date": date_str,
+                    }
+                    tasks_count += 1
+    return {"history_tasks": tasks_count, "history_edges": edges_count}
+
+
 # -- watch + auto-refresh -----------------------------------------------------------------------
 def graph_watch(ws: Workspace, interval: float = 2.0, debounce: float = 3.0, cycles: int | None = None,
                 sleep=time.sleep, say=print) -> int:
     """Poll for source/doc changes; rebuild (incrementally) once edits settle. Returns the number of rebuilds."""
     def signature():
-        index = CodeIndex(ws)
-        files = index.files + index._list_files(500, exts=_DOC_EXTS)
+        index = CodeIndex(ws, max_files=None)
+        files = index.files + index._list_files(None, exts=_DOC_EXTS)
         sig = {}
         for rel in files:
             try:
@@ -774,7 +976,7 @@ def graph_auto_refresh(ws: Workspace) -> str:
     try:
         status = graph_status(ws)
         if not status["built"]:
-            if mode != "auto" or len(CodeIndex(ws).files) > 1500:
+            if mode != "auto" or len(CodeIndex(ws, max_files=None).files) > 1500:
                 return ""
             g = graph_build(ws)
             return "built ({} nodes, {} edges)".format(g["stats"]["nodes"], g["stats"]["edges"])
@@ -793,7 +995,8 @@ def run_command(ws, args) -> int:
     import veratum_export
     text = " ".join(args.text).strip()
     if args.action == "build":
-        g = graph_build(ws, full=args.full, max_files=max(1, args.max_files))
+        g = graph_build(ws, full=args.full, max_files=max(0, args.max_files), max_file_kb=max(0, args.max_file_kb),
+                        progress=lambda msg: print(msg, file=sys.stderr))
         if args.json:
             _print_json(g["stats"])
         else:
@@ -841,6 +1044,22 @@ def run_command(ws, args) -> int:
                 res["files"], res["nodes"], res["edges"]))
             return 0
         raise VeratumError("graph semantic: use `list` or `add`.")
+    if args.action == "history":
+        gdir = ws.dir / "graph"
+        date_re = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+        date_dirs = [p for p in gdir.iterdir() if p.is_dir() and date_re.match(p.name)] if gdir.is_dir() else []
+        if (gdir / "history").is_dir():
+            date_dirs += [p for p in (gdir / "history").iterdir() if p.is_dir() and date_re.match(p.name)]
+        date_dirs = sorted(set(date_dirs), key=lambda d: d.name)
+        if not date_dirs:
+            print("🕸️  No date-wise history folders yet.")
+            return 0
+        print("🕸️  [VERATUM GRAPH HISTORY] {} date(s):".format(len(date_dirs)))
+        for d in date_dirs:
+            task_files = [f for f in d.glob("*.json") if f.name not in ("graph.json", "cache.json")]
+            print("   - {} ({} task/query record(s), snapshot: {})".format(
+                d.name, len(task_files), "yes" if (d / "graph.json").is_file() else "no"))
+        return 0
     if args.action != "export":
         graph_auto_refresh(ws)
     graph = graph_load(ws)

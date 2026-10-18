@@ -964,6 +964,17 @@ class TestHooks(VeratumTestCase):
         self.assertIn("[VERATUM BRAIN]", out)
         self.assertIn("Use pnpm, never npm", out)
 
+    def test_auto_update_checker(self):
+        self.seed_project()
+        ws = veratum_cli.Workspace(self.tmp)
+        # Test simulated newer version fetch
+        res = veratum_cli.check_auto_update(ws, force=True, fetcher=lambda: "v2.0.0")
+        self.assertTrue(res["update_available"])
+        self.assertEqual(res["latest_version"], "2.0.0")
+        ctx = veratum_cli.brain_context(ws)
+        self.assertIn("[VERATUM UPDATE AVAILABLE]", ctx)
+        self.assertIn("v2.0.0", ctx)
+
     def test_hooks_are_inert_without_veratum(self):
         code, out, err = self.hook("pre-tool", {"hook_event_name": "PreToolUse", "tool_name": "Write",
                                                 "tool_input": {"file_path": str(self.tmp / "x.txt")}})

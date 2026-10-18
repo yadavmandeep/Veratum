@@ -338,7 +338,7 @@ class TestGraphExports(GraphCase):
         self.assertEqual(code, 0, out)
         base = self.tmp / ".veratum/graph/export"
         html_text = (base / "graph.html").read_text(encoding="utf-8")
-        self.assertIn("<svg", html_text)
+        self.assertIn("<canvas", html_text)  # interactive viewer
         self.assertNotIn("http://cdn", html_text)
         self.assertNotIn("src=\"http", html_text)  # self-contained: no external requests
         self.assertIn("<line", (base / "graph.svg").read_text(encoding="utf-8"))
@@ -594,5 +594,245 @@ class TestGraphStaysOutOfGit(VeratumTestCase):
         self.assertEqual(gi.read_text(encoding="utf-8").splitlines().count("graph/"), 1)
 
 
+class TestNoFileLimit(GraphCase):
+    """`graph build` takes every file by default (it used to stop at 5000)."""
+
+    def test_default_has_no_cap(self):
+        args = veratum_cli.build_parser().parse_args(["graph", "build"])
+        self.assertEqual((args.max_files, args.max_file_kb), (0, 5120))
+
+    def test_more_than_5000_files_are_all_in_the_graph(self):
+        for i in range(5050):
+            (self.tmp / "pkg{}".format(i // 500)).mkdir(exist_ok=True)
+            (self.tmp / "pkg{}".format(i // 500) / "m{}.py".format(i)).write_text("def f{0}():\n    return {0}\n".format(i), encoding="utf-8")
+        code, out, stdout, err = self.cli("graph", "build")
+        self.assertEqual(code, 0, out)
+        stats = self.graph()["stats"]
+        self.assertEqual((stats["files"], stats["truncated"]), (5050, False))
+        self.assertIn("5000/5050", err)  # progress goes to stderr on big repos
+        code, out, stdout, _ = self.cli("graph", "build")  # second run: everything from the cache, nothing re-parsed
+        self.assertEqual((self.graph()["stats"]["from_cache"], self.graph()["stats"]["extracted_now"]), (5050, 0))
+
+    def test_explicit_cap_still_works_and_warns(self):
+        self.project()
+        self.build("--max-files", "3")
+        self.assertEqual((self.graph()["stats"]["files"], self.graph()["stats"]["truncated"]), (3, True))
+        self.assertIn("file limit reached", (self.tmp / ".veratum/graph/GRAPH_REPORT.md").read_text(encoding="utf-8"))
+
+    def test_huge_generated_files_are_skipped_not_fatal(self):
+        self.project()
+        self.write("vendor_bundle.py", "x = 1\n" + "# pad\n" * 900000)  # ~5.4 MB (> 5120 KB)
+        self.build()
+        stats = self.graph()["stats"]
+        self.assertEqual(stats["skipped_large"], 1)
+        self.assertNotIn("vendor_bundle.py", {n["source_file"] for n in self.graph()["nodes"]})
+        self.assertEqual(veratum_graph.graph_status(veratum_cli.Workspace(self.tmp))["stale_files"], [])  # not "stale" forever
+        self.build("--max-file-kb", "0")
+        self.assertEqual(self.graph()["stats"]["skipped_large"], 0)
+
+    def test_touched_but_unchanged_files_are_not_reparsed(self):
+        self.project()
+        self.build()
+        now = os.stat(self.tmp / "lonely.py").st_mtime + 50
+        os.utime(self.tmp / "lonely.py", (now, now))
+        self.assertEqual(veratum_graph.graph_status(veratum_cli.Workspace(self.tmp))["stale_files"], [])
+        self.build()
+        self.assertEqual((self.graph()["stats"]["extracted_now"], self.graph()["stats"]["from_cache"]), (0, 6))
+
+    def test_json_is_compact_and_calls_are_deduplicated(self):
+        self.write("a.py", "def helper():\n    pass\n\n\ndef run():\n" + "    helper()\n" * 200)
+        self.build()
+        self.assertNotIn("\n  ", (self.tmp / ".veratum/graph/graph.json").read_text(encoding="utf-8"))
+        cache = json.loads((self.tmp / ".veratum/graph/cache.json").read_text(encoding="utf-8"))
+        self.assertEqual(len(cache["files"]["a.py"]["data"]["calls"]), 1)
+
+    def test_big_generic_file_extracts_in_linear_time(self):
+        import time
+        lines = []
+        for i in range(3000):
+            lines += ["func Handler{0}() {{".format(i), "    other{0}()".format(i), "}"]
+        start = time.time()
+        res = veratum_graph.graph_extract_file("\n".join(lines), "go")
+        self.assertLess(time.time() - start, 5)
+        self.assertEqual(len(res["defs"]), 3000)
+        self.assertEqual(res["calls"][5]["owner"], "Handler5")
+
+
+class TestInteractiveHtml(GraphCase):
+    def setUp(self):
+        super().setUp()
+        self.project()
+        self.build()
+        self.html = veratum_export.graph_export_html(self.graph())
+
+    def parts(self):
+        import re
+        data = re.search(r'<script id="data" type="application/json">(.*?)</script>', self.html, re.S).group(1)
+        script = re.search(r"</script>\s*<script>(.*?)</script>", self.html, re.S).group(1)
+        return data, script
+
+    def test_viewer_has_the_interactive_features(self):
+        for needle in ('id="q"', 'id="conf"', 'id="rel"', 'id="kind"', 'id="comm"', 'id="detail"', 'id="bub"', "wheel", "Copy path",
+                       "Reset", "Group by community", "Always show file names", "EXTRACTED", "prefers-color-scheme"):
+            self.assertIn(needle, self.html, needle)
+        self.assertNotIn("http://", self.html)
+        self.assertNotIn("https://", self.html)
+
+    def test_embedded_data_is_a_file_level_map(self):
+        data = json.loads(self.parts()[0])
+        self.assertEqual(data["meta"]["total_files"], self.graph()["stats"]["files"])
+        labels = [n["l"] for n in data["nodes"]]
+        self.assertIn("api.py", labels)
+        self.assertNotIn("checkout", labels)  # functions are listed inside their file, not drawn as separate dots
+        api = data["nodes"][labels.index("api.py")]
+        self.assertIn(["checkout", "function", "L4"], api["sy"])
+        self.assertTrue(all(0 <= e["s"] < len(data["nodes"]) and 0 <= e["t"] < len(data["nodes"]) for e in data["links"]))
+        link = next(e for e in data["links"] if labels[e["s"]] == "api.py" and labels[e["t"]] == "billing.py")
+        self.assertEqual(link["q"], "EXTRACTED")
+        self.assertEqual((link["rc"]["imports"], link["rc"]["calls"]), (1, 1))
+        self.assertTrue(any(x["a"] == "checkout" and x["b"] == "charge" and x["f"] == "app/api.py" and x["o"] == "L5" for x in link["x"]))
+
+    def test_fewer_dots_than_the_symbol_graph(self):
+        data = json.loads(self.parts()[0])
+        self.assertLess(len(data["nodes"]), self.graph()["stats"]["nodes"] // 2)
+
+    def test_hostile_labels_cannot_break_out_of_the_page(self):
+        g = self.graph()
+        g["nodes"][0]["label"] = "</script><img src=x onerror=alert(1)> "
+        page = veratum_export.graph_export_html(g)
+        self.assertEqual(page.count("</script>"), 2)  # data block + program, nothing injected
+        self.assertNotIn("<img src=x", page)
+        import re
+        data = re.search(r'<script id="data" type="application/json">(.*?)</script>', page, re.S).group(1)
+        self.assertIn("</script><img src=x onerror=alert(1)> ", [n["l"] for n in json.loads(data)["nodes"]])  # kept as data...
+        self.assertNotIn(" ", page)  # ...but the raw line-separator character never appears on the wire
+
+    @unittest.skipUnless(HAS_NODE, "node not available")
+    def test_script_parses_and_runs_against_a_stub_dom(self):
+        data, script = self.parts()
+        (self.tmp / "viewer.js").write_text(script, encoding="utf-8")
+        (self.tmp / "data.json").write_text(data, encoding="utf-8")
+        check = subprocess.run(["node", "--check", str(self.tmp / "viewer.js")], capture_output=True, timeout=60)
+        self.assertEqual(check.returncode, 0, check.stderr.decode("utf-8", "replace"))
+        (self.tmp / "run.js").write_text(
+            'const fs=require("fs");const noop=()=>{};const els={};\n'
+            'const ctx=new Proxy({}, {get:(t,k)=>(k in t?t[k]:noop),set:(t,k,v)=>{t[k]=v;return true}});\n'
+            'function mk(){const e={style:{},children:[],classList:{add:noop,remove:noop,toggle:noop,contains:()=>false},'
+            'appendChild(c){this.children.push(c);return c},addEventListener:noop,getContext:()=>ctx,'
+            'getBoundingClientRect:()=>({left:0,top:0,width:900,height:600}),focus:noop,_t:""};\n'
+            'Object.defineProperty(e,"textContent",{get(){return this._t},set(v){this._t=v;if(v==="")this.children=[]}});\n'
+            'e.parentElement={getBoundingClientRect:()=>({left:0,top:0,width:900,height:600})};return e}\n'
+            'global.document={getElementById:id=>els[id]||(els[id]=mk()),createElement:()=>mk(),documentElement:mk(),activeElement:null,createTextNode:t=>({t})};\n'
+            'els.data=mk();els.data.textContent=fs.readFileSync("data.json","utf8");\n'
+            'global.window={devicePixelRatio:1,addEventListener:noop};global.getComputedStyle=()=>({getPropertyValue:()=>"#222"});\n'
+            'global.requestAnimationFrame=noop;global.matchMedia=()=>({matches:false});global.navigator={};\n'
+            'new Function(fs.readFileSync("viewer.js","utf8"))();\n'
+            'console.log(JSON.stringify({stat:els.stat.textContent,conf:els.conf.children.length,comm:els.comm.children.length}));\n',
+            encoding="utf-8")
+        run = subprocess.run(["node", "run.js"], cwd=self.tmp, capture_output=True, timeout=60)
+        self.assertEqual(run.returncode, 0, run.stderr.decode("utf-8", "replace"))
+        out = json.loads(run.stdout.decode("utf-8").strip().splitlines()[-1])
+        self.assertIn("files shown", out["stat"])
+        self.assertEqual(out["conf"], 3)  # EXTRACTED / INFERRED / AMBIGUOUS filters
+        self.assertGreaterEqual(out["comm"], 1)
+
+    def test_sql_and_groovy_extraction(self):
+        self.project()
+        self.write("db/pkg.spc", "CREATE OR REPLACE PACKAGE test_pkg AS\n  PROCEDURE do_work;\nEND test_pkg;\n")
+        self.write("db/proc.sql", "CREATE OR REPLACE PROCEDURE run_process IS\nBEGIN\n  test_pkg.do_work();\nEND;\n")
+        self.write("src/Worker.groovy", "class Worker {\n  void execute() {\n    println('running')\n  }\n}\n")
+        self.build()
+        g = self.graph()
+        nodes = {n["id"]: n for n in g["nodes"]}
+        self.assertIn("sym:db/pkg.spc::test_pkg", nodes)
+        self.assertIn("sym:db/proc.sql::run_process", nodes)
+        self.assertIn("sym:src/Worker.groovy::Worker", nodes)
+
+
+class TestDateWiseGraphHistory(GraphCase):
+    def test_record_task_history_in_date_folder(self):
+        self.project()
+        ws = veratum_cli.Workspace(self.tmp)
+        task_data = {
+            "id": "c-test-101",
+            "goal": "Refactor checkout flow to support fast pay",
+            "query": "Refactor checkout flow to support fast pay",
+            "completed_at": "2026-10-18T10:00:00Z",
+            "files_changed": ["app/api.py", "app/billing.py"],
+            "verify": "npm test",
+            "status": "COMPLETED",
+        }
+        path = veratum_graph.record_task_history(ws, task_data)
+        self.assertTrue(path.is_file())
+        self.assertIn("2026-10-18", str(path))
+        self.assertEqual(path.name, "c-test-101.json")
+        # Assert tasks.json also updated
+        tasks_json = path.parent / "tasks.json"
+        self.assertTrue(tasks_json.is_file())
+        self.assertEqual(json.loads(tasks_json.read_text(encoding="utf-8"))[0]["id"], "c-test-101")
+
+        self.build()
+        g = self.graph()
+        self.assertEqual(veratum_graph.validate_graph(g), [])
+
+        # Assert date folder has Graphify snapshot files
+        date_dir = self.tmp / ".veratum" / "graph" / "2026-10-18"
+        self.assertTrue((date_dir / "graph.json").is_file())
+        self.assertTrue((date_dir / "GRAPH_REPORT.md").is_file())
+        self.assertTrue((date_dir / "cache.json").is_file())
+
+        nodes = {n["id"]: n for n in g["nodes"]}
+        self.assertIn("task:c-test-101", nodes)
+        task_node = nodes["task:c-test-101"]
+        self.assertEqual(task_node["kind"], "task")
+        self.assertEqual(task_node["date"], "2026-10-18")
+        self.assertIn("Refactor checkout", task_node["label"])
+
+        edge_api = self.edge(g, "Refactor checkout flow to support fast pay", "modified", "api.py")
+        self.assertEqual(edge_api["confidence"], "EXTRACTED")
+        edge_billing = self.edge(g, "Refactor checkout flow to support fast pay", "modified", "billing.py")
+        self.assertEqual(edge_billing["confidence"], "EXTRACTED")
+
+    def test_all_files_inside_date_folder_are_added(self):
+        self.project()
+        ws = veratum_cli.Workspace(self.tmp)
+        date_dir = self.tmp / ".veratum" / "graph" / "2026-10-19"
+        date_dir.mkdir(parents=True, exist_ok=True)
+
+        (date_dir / "query_1.json").write_text(json.dumps({
+            "id": "q1", "goal": "Add discount calculation", "files": ["app/billing.py"], "completed_at": "2026-10-19T12:00:00Z"
+        }), encoding="utf-8")
+        (date_dir / "query_2.json").write_text(json.dumps([
+            {"id": "q2", "query": "Fix cart serialization", "files_changed": ["app/api.py"], "completed_at": "2026-10-19T14:00:00Z"}
+        ]), encoding="utf-8")
+        (date_dir / "notes.txt").write_text("Daily meeting notes", encoding="utf-8")
+
+        self.build()
+        g = self.graph()
+        self.assertEqual(veratum_graph.validate_graph(g), [])
+        nodes = {n["id"]: n for n in g["nodes"]}
+        self.assertIn("task:q1", nodes)
+        self.assertIn("task:q2", nodes)
+        hist_file_nodes = [n for n in g["nodes"] if n.get("kind") == "history"]
+        self.assertTrue(any("notes.txt" in n["label"] for n in hist_file_nodes))
+
+    def test_query_finds_past_tasks(self):
+        self.project()
+        ws = veratum_cli.Workspace(self.tmp)
+        veratum_graph.record_task_history(ws, {
+            "id": "c-auth-99",
+            "goal": "Implement OAuth2 token authentication",
+            "completed_at": "2026-10-18T15:00:00Z",
+            "files_changed": ["app/api.py"],
+        })
+        self.build()
+        g = self.graph()
+        q_result = veratum_graph.graph_query(g, "OAuth2 authentication")
+        self.assertIn("Implement OAuth2 token authentication", q_result)
+        self.assertIn("api.py", q_result)
+
+
 if __name__ == "__main__":
     unittest.main()
+
+

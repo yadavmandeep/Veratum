@@ -49,7 +49,7 @@ If the agent edits anything after verifying, the gate prints:
 | `V contract --mode implement` | Leave plan/review mode on the active contract (after approval) |
 | `V contract --extend "<files>"` / `--show` / `--abandon` | Change / view / drop the contract |
 | `V impact <file> [--depth 2] [--symbol X] [--evidence] [--json]` | Blast radius: dependents + the exports they use, git co-change history, dynamic mentions, related tests. `--evidence` (always on with `--json`) adds `file:line` proof per relationship, labelled `EXTRACTED` (import statement resolved) or `INFERRED` (name match, git history, test naming) |
-| `V graph build [--full] [--max-files N]` | Build/refresh the knowledge graph in `.veratum/graph/` (`graph.json`, `GRAPH_REPORT.md`, `cache.json`). Incremental: unchanged files (by SHA-256) are not re-parsed |
+| `V graph build [--full] [--max-files N] [--max-file-kb K]` | Build/refresh the knowledge graph in `.veratum/graph/` (`graph.json`, `GRAPH_REPORT.md`, `cache.json`). **Takes every file by default** (no cap); `--max-files N` limits it, `--max-file-kb K` (default 1024) skips huge generated/minified sources. Incremental: files with the same size and modification time are not even re-hashed, changed ones are re-parsed. Prints progress on big repos |
 | `V graph query "<question>" [--mode bfs\|dfs] [--depth 2] [--budget 2000]` | Token-budgeted subgraph for a question; every node/edge shows `file:line` and EXTRACTED / INFERRED / AMBIGUOUS |
 | `V graph path <A> <B>` · `graph explain <node>` · `graph report` · `graph benchmark "<q>"` · `graph status` | Shortest relationship path, one node's neighbours, god nodes/communities/surprising links, corpus-vs-subgraph token ratio, stale-file check. MCP: `veratum_graph` |
 | `V graph export [--format html\|svg\|obsidian\|cypher\|all] [--out dir] [--max-nodes 200]` | Picture, Obsidian vault, Neo4j script (default `.veratum/graph/export/`) |
@@ -72,7 +72,7 @@ If the agent edits anything after verifying, the gate prints:
 
 ## Codebase graph
 
-On by default. At session start Veratum builds `.veratum/graph/` (small repos, up to 1500 source files) and refreshes it whenever files changed; `graph query`, `path`, `explain` and `report` also refresh a stale graph first. The session-start text tells the agent to query the graph before grepping, and the generated rule files for Cursor, Windsurf, Cline, Copilot and OpenCode say the same.
+On by default. At session start Veratum builds `.veratum/graph/` automatically for repos up to 1500 source files (bigger repos: run `graph build` once, it then takes every file and the session-start hook keeps it fresh) and refreshes it whenever files changed; `graph query`, `path`, `explain` and `report` also refresh a stale graph first. The session-start text tells the agent to query the graph before grepping, and the generated rule files for Cursor, Windsurf, Cline, Copilot and OpenCode say the same.
 
 * **Settings:** `python .veratum/engine/veratum_cli.py config graph_auto <value>`: `auto` (default: build if missing, then keep fresh), `refresh` (never build, only refresh an existing graph), `off`. It is stored as `"graph_auto"` in `.veratum/config.json`.
 * **What is in it:** files, functions, classes, Markdown docs (headings, links, `` `code` `` mentions), PDFs/images as nodes. Imports are `EXTRACTED`; name-resolved calls are `INFERRED`; several candidates are `AMBIGUOUS`. Every edge has `file:line`.
