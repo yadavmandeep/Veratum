@@ -594,6 +594,13 @@ async function init(opts) {
     return 1;
   }
   log.push("ready    .veratum/brain.json (project memory)");
+
+  // Automatically build the knowledge graph during init
+  const graphRes = runEngine(target, py, ["graph", "build"], { capture: true });
+  if (graphRes.status === 0) {
+    log.push("ready    .veratum/graph/ (code & asset knowledge graph mapped)");
+  }
+
   const skill = readSkill();
   for (const ide of ides) {
     for (const n of IDES[ide].install(target, py, skill, log)) notes.push(`${IDE_LABELS[ide]}: ${n}`);

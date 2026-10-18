@@ -96,5 +96,5 @@ Veratum includes an incremental, compiler-grade knowledge graph engine (`.veratu
   - `embeds` [EXTRACTED]: Markdown `![alt](img)` or HTML `<img src="path">` tags referencing visual/media assets.
   - `calls` / `references` [INFERRED]: Call sites resolved through imports or unique name matches.
 - **Louvain Community Clustering**: Partitions the graph into high-density functional modules with hierarchical clustering for oversized components.
-- **Interactive Visualizer & Exports**: Generates Graphify-aligned HTML viewers, vector SVG maps, Obsidian markdown vaults, and Cypher scripts for Neo4j / FalkorDB.
+- **Interactive Visualizer & Exports**: Generates interactive HTML viewers with real-time physics, vector SVG maps, Obsidian markdown vaults, and Cypher scripts for Neo4j / FalkorDB.
 

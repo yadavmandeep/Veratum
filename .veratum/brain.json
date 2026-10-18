@@ -2,7 +2,7 @@
   "schema": "veratum.brain/v1",
   "project": "veratum",
   "created_at": "2026-10-17T19:38:03Z",
-  "updated_at": "2026-10-18T13:15:21Z",
+  "updated_at": "2026-10-18T19:51:28Z",
   "stack": [
     "node",
     "python"
@@ -18,8 +18,8 @@
       "last_pass": "2026-10-18T09:48:05Z"
     },
     "node bin/veratum.js build --check": {
-      "passes": 4,
-      "last_pass": "2026-10-18T10:37:11Z"
+      "passes": 5,
+      "last_pass": "2026-10-18T19:37:49Z"
     },
     "python -m unittest discover -s tests -p test_veratum_graph.py": {
       "passes": 1,
@@ -48,6 +48,10 @@
     "python -m pytest tests/test_veratum_engine.py -k test_detects_python_go_rust_stacks -q": {
       "passes": 2,
       "last_pass": "2026-10-18T13:15:18Z"
+    },
+    "npm run check": {
+      "passes": 7,
+      "last_pass": "2026-10-18T19:51:25Z"
     }
   },
   "modules": {
@@ -183,6 +187,27 @@
       "text": "Refined visualizer layout to full-bleed canvas with exact Graphify screenshot parity: integrated snapshot switcher into sidebar, removed top bar distractions, and perfected COMMUNITIES list alignment and colors.",
       "files": [],
       "created_at": "2026-10-18T11:35:22Z"
+    },
+    {
+      "id": "m14",
+      "kind": "architecture",
+      "text": "Scoped package @yadavmandeep/veratum configured in package.json with public publishConfig, download tracking badges, and full compatibility for both npx @yadavmandeep/veratum and npx github:yadavmandeep/Veratum",
+      "files": [],
+      "created_at": "2026-10-18T19:25:11Z"
+    },
+    {
+      "id": "m15",
+      "kind": "architecture",
+      "text": "bin/veratum.js now triggers automatic knowledge graph build immediately during init so the project is pre-mapped out of the box",
+      "files": [],
+      "created_at": "2026-10-18T19:40:28Z"
+    },
+    {
+      "id": "m16",
+      "kind": "architecture",
+      "text": "graph_export_html signature accepts snapshots parameter so auto-write HTML views produce graph.html and index.html in root and date-wise snapshot folders",
+      "files": [],
+      "created_at": "2026-10-18T19:47:31Z"
     }
   ],
   "task_history": [
@@ -559,12 +584,102 @@
       "verify": "python -m pytest tests/test_veratum_engine.py -k test_detects_python_go_rust_stacks -q",
       "tree_hash": "a4026b4aea49cf589cedb09df69035f5ed76407a29d7e415dc8138804a8ab6cb",
       "completed_at": "2026-10-18T13:15:21Z"
+    },
+    {
+      "contract_id": "c-20261019-005406-3fe7",
+      "goal": "Set package name to @yadavmandeep/veratum for npm publishing and tracking, support both npx @yadavmandeep/veratum and github fallback",
+      "files_changed": [
+        "README.md",
+        "docs/publishing.md",
+        "package.json"
+      ],
+      "verify": "npm run check",
+      "tree_hash": "3d6dfd7dd2b2152f5afd180d80043f4859c06bfa508aa7d22863ee99b30c30f1",
+      "completed_at": "2026-10-18T19:25:06Z"
+    },
+    {
+      "contract_id": "c-20261019-005836-7ebb",
+      "goal": "Fix npm scope to @mandeepyadav/veratum to match logged in npm user mandeepyadav",
+      "files_changed": [],
+      "verify": "npm run check",
+      "tree_hash": "3d6dfd7dd2b2152f5afd180d80043f4859c06bfa508aa7d22863ee99b30c30f1",
+      "completed_at": "2026-10-18T19:30:56Z"
+    },
+    {
+      "contract_id": "c-20261019-010623-de6d",
+      "goal": "Bump version from 1.3.0 to 1.3.1 across all package manifests, engine, adapters and skills",
+      "files_changed": [
+        "CITATION.cff",
+        "adapters/antigravity/plugin.json",
+        "core/SKILL.template.md",
+        "engine/veratum_cli.py",
+        "package.json",
+        "pyproject.toml",
+        "skills/veratum/SKILL.md",
+        "skills/veratum/scripts/veratum_cli.py"
+      ],
+      "verify": "node bin/veratum.js build --check",
+      "tree_hash": "f2f41a8026bc622aa47c8e670288b429e023bd12932bce095f47e03573d150a7",
+      "completed_at": "2026-10-18T19:37:53Z"
+    },
+    {
+      "contract_id": "c-20261019-010943-9dd3",
+      "goal": "Auto-build code graph immediately during veratum init and update README highlighting graph build",
+      "files_changed": [
+        "bin/veratum.js"
+      ],
+      "verify": "npm run check",
+      "tree_hash": "237a0ec44075d1cb1d30d6bf4849033757a35b67a291099b852db1c885a1d640",
+      "completed_at": "2026-10-18T19:40:23Z"
+    },
+    {
+      "contract_id": "c-20261019-011055-68cf",
+      "goal": "Remove all references to Graphify from user-facing documentation and README",
+      "files_changed": [
+        "README.md",
+        "docs/concepts.md"
+      ],
+      "verify": "npm run check",
+      "tree_hash": "759cfe1625563c6b511534004aaec0a5af0b9f17ce0c645690b7d3f905d1ddc6",
+      "completed_at": "2026-10-18T19:42:09Z"
+    },
+    {
+      "contract_id": "c-20261019-011305-9258",
+      "goal": "Move graph build callout directly under Install section in README",
+      "files_changed": [
+        "README.md"
+      ],
+      "verify": "npm run check",
+      "tree_hash": "8325a2e9cbf679c13620e777f7d3f8b9316123ac87cecfd803e6d23366496b1d",
+      "completed_at": "2026-10-18T19:43:34Z"
+    },
+    {
+      "contract_id": "c-20261019-011442-3767",
+      "goal": "Fix graph_export_html signature to accept snapshots parameter and ensure graph.html is written cleanly",
+      "files_changed": [
+        "engine/veratum_export.py",
+        "skills/veratum/scripts/veratum_export.py"
+      ],
+      "verify": "npm run check",
+      "tree_hash": "c77ae287d02a44b1b2b266402307d7e14bc2952f867903c056de66221be606de",
+      "completed_at": "2026-10-18T19:47:27Z"
+    },
+    {
+      "contract_id": "c-20261019-011747-5fef",
+      "goal": "Transform HTML graph export UI to exact dark cyber aesthetic matching reference screenshot: full dark canvas, right-hand COMMUNITIES sidebar with Select All, circular colored swatches, count badges, and clean force graph",
+      "files_changed": [
+        "engine/veratum_export.py",
+        "skills/veratum/scripts/veratum_export.py"
+      ],
+      "verify": "npm run check",
+      "tree_hash": "4321bf65dc97afc49cbbdecd4167ffe4eeffe6c096aa59ba8811e0b359ac8157",
+      "completed_at": "2026-10-18T19:51:28Z"
     }
   ],
   "stats": {
-    "verify_runs": 35,
-    "verify_passes": 32,
-    "tasks_completed": 27,
+    "verify_runs": 43,
+    "verify_passes": 40,
+    "tasks_completed": 35,
     "log_lines_saved": 2892
   }
 }

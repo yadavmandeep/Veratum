@@ -7,6 +7,8 @@
 [yadavmandeep/Veratum](https://github.com/yadavmandeep/Veratum) · Antigravity · Claude Code · Cursor · Windsurf · Cline · GitHub Copilot · OpenCode
 
 [![Tests](https://img.shields.io/badge/tests-140%20passed-10B981.svg?style=flat-square&logo=githubactions&logoColor=white)](tests/)
+[![npm package](https://img.shields.io/npm/v/@yadavmandeep/veratum.svg?style=flat-square&logo=npm&color=CB3837)](https://www.npmjs.com/package/@yadavmandeep/veratum)
+[![npm downloads](https://img.shields.io/npm/dw/@yadavmandeep/veratum.svg?style=flat-square&logo=npm&color=CB3837)](https://www.npmjs.com/package/@yadavmandeep/veratum)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-3776AB.svg?style=flat-square&logo=python&logoColor=white)](pyproject.toml)
 [![Dependencies](https://img.shields.io/badge/dependencies-0-blue.svg?style=flat-square)](package.json)
 [![Supported IDEs](https://img.shields.io/badge/IDEs-7%20supported-8B5CF6.svg?style=flat-square)](docs/hosts.md)
@@ -36,21 +38,35 @@ Pick **your** IDE or AI coding tool.
 Run this inside the project you want to use Veratum in (a brand-new project or one that already has code):
 
 ```bash
-npx github:yadavmandeep/Veratum init --ide antigravity   # or claude-code | cursor | windsurf | cline | copilot | opencode
+npx @yadavmandeep/veratum init --ide antigravity   # or claude-code | cursor | windsurf | cline | copilot | opencode
 ```
-*Run `npx github:yadavmandeep/Veratum init` with no flags for an interactive picker that auto-detects your editors.*
+*(Also works with `npx github:yadavmandeep/Veratum init` directly from source)*
+
+*Run `npx @yadavmandeep/veratum init` with no flags for an interactive picker that auto-detects your editors.*
 
 **What you get:** the runtime engine and project memory (`.veratum/`), the always-on rules, the MCP server and native hooks where your editor supports them, the **code graph** (builds itself the first time a session starts, and stays fresh), and the `/veratum` command (`/veratum graph build`, `/veratum graph query <question>`, `/veratum status`, ...). When it finishes, the installer prints the commands to type. Restart your editor (Claude Code: restart or open `/hooks`) so it loads them. Updating later: the same command with `update` instead of `init`.
 
 | IDE / Extension | Full Setup (Engine + Rules + MCP + Hooks + Code graph + `/veratum`) | Skill-only (`skills.sh`) |
 |---|---|---|
-| **Google Antigravity** | `npx github:yadavmandeep/Veratum init --ide antigravity` | `npx skills add yadavmandeep/veratum --skill veratum --agent antigravity --yes` |
-| **Claude Code** | `npx github:yadavmandeep/Veratum init --ide claude-code` | `npx skills add yadavmandeep/veratum --skill veratum --agent claude-code --yes` |
-| **Cursor** | `npx github:yadavmandeep/Veratum init --ide cursor` | `npx skills add yadavmandeep/veratum --skill veratum --agent cursor --yes` |
-| **Windsurf** | `npx github:yadavmandeep/Veratum init --ide windsurf` | `npx skills add yadavmandeep/veratum --skill veratum --agent windsurf --yes` |
-| **Cline (VS Code)** | `npx github:yadavmandeep/Veratum init --ide cline` | `npx skills add yadavmandeep/veratum --skill veratum --agent cline --yes` |
-| **GitHub Copilot (VS Code)** | `npx github:yadavmandeep/Veratum init --ide copilot` | `npx skills add yadavmandeep/veratum --skill veratum --agent github-copilot --yes` |
-| **OpenCode** | `npx github:yadavmandeep/Veratum init --ide opencode` | `npx skills add yadavmandeep/veratum --skill veratum --agent opencode --yes` |
+| **Google Antigravity** | `npx @yadavmandeep/veratum init --ide antigravity` | `npx skills add yadavmandeep/veratum --skill veratum --agent antigravity --yes` |
+| **Claude Code** | `npx @yadavmandeep/veratum init --ide claude-code` | `npx skills add yadavmandeep/veratum --skill veratum --agent claude-code --yes` |
+| **Cursor** | `npx @yadavmandeep/veratum init --ide cursor` | `npx skills add yadavmandeep/veratum --skill veratum --agent cursor --yes` |
+| **Windsurf** | `npx @yadavmandeep/veratum init --ide windsurf` | `npx skills add yadavmandeep/veratum --skill veratum --agent windsurf --yes` |
+| **Cline (VS Code)** | `npx @yadavmandeep/veratum init --ide cline` | `npx skills add yadavmandeep/veratum --skill veratum --agent cline --yes` |
+| **GitHub Copilot (VS Code)** | `npx @yadavmandeep/veratum init --ide copilot` | `npx skills add yadavmandeep/veratum --skill veratum --agent github-copilot --yes` |
+| **OpenCode** | `npx @yadavmandeep/veratum init --ide opencode` | `npx skills add yadavmandeep/veratum --skill veratum --agent opencode --yes` |
+
+> ### ⚡ Map Your Entire Repo with Interactive Code Graph
+> After running `init`, simply type this in your agent's chat:
+> ```text
+> /veratum graph build
+> ```
+> *Veratum immediately maps all 24+ languages, markdown docs, and media assets into an interactive queryable graph (`graph.html`).*
+>
+> **Ask questions directly to the code graph:**
+> ```text
+> /veratum graph query where is authentication handled?
+> ```
 
 ### Using VS Code with Multiple Extensions?
 VS Code supports several AI assistants. Configure Veratum for whichever assistant you use in VS Code:
@@ -113,7 +129,7 @@ Verified by:     `pnpm test -- list` → EXIT 0 (4.2s)
 Tree hash:       sha256:9c41e0a7… (matches verified state)
 ```
 
-### 🌐 Codebase & Multi-Format Knowledge Graph (Graphify-Grade)
+### 🌐 Codebase & Multi-Format Knowledge Graph
 
 Veratum builds a queryable knowledge graph of your entire workspace on session start and keeps it fresh after every file edit. It is not limited to source code—it indexes **code, documents, papers, images, and media assets** with an honest audit trail:
 - **Languages (24+)**: Python, TypeScript, JavaScript, Go, Rust, Java, C/C++, C#, Ruby, PHP, Bash, Kotlin, Swift, Elixir, Groovy, PL/SQL, JSP, etc.
@@ -132,9 +148,20 @@ Type this directly in your agent's chat:
 /veratum graph query where is checkout handled?
 ```
 
-`init` adds one command to your editor, `/veratum`, with a unified CLI interface:
+`init` adds one unified slash command directly into your editor's chat: **`/veratum`**.
 
-| Type this | What happens |
+> [!TIP]
+> **How to use slash commands:** In Claude Code, Cursor, Copilot, OpenCode, Windsurf, or Antigravity chat, type `/veratum` followed by the action:
+> - `/veratum graph build` *(builds code graph)*
+> - `/veratum graph query <question>` *(ask anything about the codebase)*
+> - `/veratum status` *(check contract and active task state)*
+> - `/veratum gate` *(check completion gate)*
+> - `/veratum impact <file>` *(check blast radius before touching code)*
+> 
+> *If you're in a terminal or using Cline, simply use the engine CLI:*
+> `python .veratum/engine/veratum_cli.py graph query "where is login?"`
+
+| Type this in Chat | What happens |
 |---|---|
 | `/veratum graph build` | Maps code, docs, images & assets now (auto-refreshes incrementally in <50ms) |
 | `/veratum graph query <question>` | Answers from knowledge graph with file and line evidence |
@@ -142,12 +169,6 @@ Type this directly in your agent's chat:
 | `/veratum impact <file>` | Blast-radius analysis: dependents, symbols, and risk score before editing |
 | `/veratum status` · `/veratum gate` · `/veratum doctor` | Contract state & ledger evidence · Completion gate validation · 11-point health check |
 | `/veratum config graph_auto off` | Toggle auto-graph build (use `/veratum config` to list all options) |
-
-They work in Claude Code, Cursor, Copilot, OpenCode, Windsurf and Antigravity (Cline: just write "Use Veratum: where is login handled?"). From a plain terminal the same thing is:
-
-```bash
-python .veratum/engine/veratum_cli.py graph query "where is login handled?"
-```
 
 `/veratum graph export` (or `python .veratum/engine/veratum_cli.py graph export`) writes an interactive map (`graph.html`: open it in any browser. One dot per file, grouped into labelled community bubbles; zoom and drag, search a file or function, filter by link type, click a file to see what is inside it and exactly which lines link it to other files), a plain picture (`graph.svg`), an Obsidian vault and a Neo4j script to `.veratum/graph/export/`. `graph build` takes **every** file of the project (no 5000-file cap); on a big repo it prints progress, and `--max-files` / `--max-file-kb` are there if you want limits. `graph report` shows the most connected code and the code clusters (communities). `graph watch` rebuilds while you type. Every link shows the file and line it came from, marked `EXTRACTED` (it is written in the code), `INFERRED` (matched by name) or `AMBIGUOUS` (several candidates). In Claude Code, OpenCode and Antigravity a small hook also reminds the agent to use the graph the first two times it reaches for Grep/Glob in a task (it stops once the graph was used, and in the other editors the always-on rule text does that job; see [docs/hosts.md](docs/hosts.md)). To turn the automatic part off: `python .veratum/engine/veratum_cli.py config graph_auto off` (back on: `python .veratum/engine/veratum_cli.py config graph_auto auto`; just `python .veratum/engine/veratum_cli.py config` lists the settings you can change). More: [docs/usage.md](docs/usage.md#codebase-graph).
 

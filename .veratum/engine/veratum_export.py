@@ -417,10 +417,12 @@ countVisible();detail(null);resize();for(var s=0;s<420;s++)tick();fit();requestA
 """
 
 
-def graph_export_html(graph: dict, max_nodes: int = 300) -> str:
+def graph_export_html(graph: dict, max_nodes: int = 300, snapshots: dict | None = None) -> str:
     """Self-contained interactive map (canvas + vanilla JS, no CDN, no network). One dot per file, links aggregated per file
     pair with their exact symbol lines one click away, community bubbles, search, filters and a details panel. Data is embedded
     as escaped JSON and rendered with textContent only, so hostile names cannot inject markup."""
+    if not graph or not graph.get("nodes"):
+        return _HTML_TEMPLATE.replace("__DATA__", "{}")
     files, links = _graph_file_view(graph, max_nodes)
     present = {f["c"] for f in files}
     counts: dict = {}

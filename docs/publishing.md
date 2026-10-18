@@ -31,22 +31,26 @@ the package page appears at `https://skills.sh/yadavmandeep/veratum`, with per-s
 - Use the badge: `[![skills.sh](https://skills.sh/b/yadavmandeep/veratum)](https://skills.sh/yadavmandeep/veratum)`.
 - Keep each skill's `description` specific about **when** to use it. That is what users scan on skills.sh and what agents use to auto-activate it.
 
-## 3. npm (optional)
+## 3. npm publishing & download tracking
 
-**The npm name `veratum` is taken** by an unrelated package (`npm view veratum` → "Tamper-proof cryptographic audit trails", v0.1.0, no CLI), so `npx veratum ...` can never run this tool. Until you publish under a free name, the docs use the GitHub form, which needs no npm publish (the repo must be public):
+Veratum is published as a scoped package: **`@yadavmandeep/veratum`**.
+This ensures:
+1. Pure "Veratum" naming with no collisions or hijacking.
+2. Official weekly/monthly download analytics tracked at [npmjs.com/package/@yadavmandeep/veratum](https://www.npmjs.com/package/@yadavmandeep/veratum).
+3. Live badges in the README auto-update with real download metrics.
 
+### Publishing to npm:
 ```bash
-npx github:yadavmandeep/Veratum init --ide claude-code
+npm whoami                    # ensure you are logged in (or run `npm login`)
+npm run check                 # verify sync check passes
+npm publish --access public   # scoped packages require --access public on first publish
 ```
 
-To get a shorter command, publish under a free name (`npm view veratum-code` returned 404 when checked) and then replace `npx github:yadavmandeep/Veratum` with `npx veratum-code` in the docs:
-
+Users can run:
 ```bash
-npm whoami                    # log in first with `npm login`
-npm view veratum-code         # 404 = the name is free
-# set "name": "veratum-code" in package.json (keep the "bin" entries)
-npm test                      # sync check + test suite must pass
-npm publish --access public
+npx @yadavmandeep/veratum init --ide <ide>
+# OR directly from github:
+npx github:yadavmandeep/Veratum init --ide <ide>
 ```
 
 ## 4. Release checklist

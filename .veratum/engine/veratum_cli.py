@@ -44,7 +44,7 @@ import time
 import uuid
 from pathlib import Path
 
-VERSION = "1.3.0"
+VERSION = "1.3.1"
 BRAND = "Veratum"
 HOMEPAGE = "https://github.com/yadavmandeep/Veratum"
 VERATUM_DIRNAME = ".veratum"
